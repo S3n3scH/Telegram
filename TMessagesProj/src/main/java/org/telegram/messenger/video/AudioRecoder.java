@@ -3,6 +3,7 @@ package org.telegram.messenger.video;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.os.Build;
+import android.util.Log;
 
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.MediaController;
@@ -84,7 +85,7 @@ public class AudioRecoder {
         }
     }
 
-    public boolean step(MP4Builder muxer, int audioTrackIndex) throws Exception {
+    public boolean step(MediaCodecVideoConvertor.Muxer muxer, int audioTrackIndex) throws Exception {
         if (!encoderInputDone) {
             int encoderBufferIndex = encoder.dequeueInputBuffer(TIMEOUT_USEC);
             if (encoderBufferIndex >= 0) {

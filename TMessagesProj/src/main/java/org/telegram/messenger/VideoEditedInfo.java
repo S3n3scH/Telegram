@@ -10,23 +10,36 @@ package org.telegram.messenger;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Matrix;
+import android.graphics.SurfaceTexture;
 import android.text.TextUtils;
 import android.view.View;
 
+import org.telegram.messenger.video.MediaCodecPlayer;
 import org.telegram.messenger.video.MediaCodecVideoConvertor;
+import org.telegram.messenger.video.VideoPlayerHolderBase;
 import org.telegram.tgnet.AbstractSerializedData;
 import org.telegram.tgnet.SerializedData;
+import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.tgnet.tl.TL_stories;
 import org.telegram.ui.Components.AnimatedFileDrawable;
 import org.telegram.ui.Components.Paint.PaintTypeface;
+import org.telegram.ui.Components.Paint.Views.LinkPreview;
 import org.telegram.ui.Components.PhotoFilterView;
 import org.telegram.ui.Components.Point;
 import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble;
+import org.telegram.ui.Components.VideoPlayer;
+import org.telegram.ui.Stories.recorder.CollageLayout;
 import org.telegram.ui.Stories.recorder.StoryEntry;
+import org.telegram.ui.Stories.recorder.Weather;
 
+import java.io.File;
+import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class VideoEditedInfo {
 
@@ -49,6 +62,7 @@ public class VideoEditedInfo {
     public long estimatedDuration;
     public boolean roundVideo;
     public boolean muted;
+    public float volume = 1f;
     public long originalDuration;
     public TLRPC.InputFile file;
     public TLRPC.InputEncryptedFile encryptedFile;
@@ -61,6 +75,11 @@ public class VideoEditedInfo {
     public boolean isPhoto;
     public boolean isStory;
     public StoryEntry.HDRInfo hdrInfo;
+
+    public CollageLayout collage;
+    public ArrayList<Part> collageParts;
+
+    public boolean isSticker;
 
     public Bitmap thumb;
     public boolean notReadyYet;
@@ -77,7 +96,6 @@ public class VideoEditedInfo {
     public boolean videoConvertFirstWrite;
     public boolean needUpdateProgress = false;
     public boolean shouldLimitFps = true;
-    public boolean tryUseHevc = false;
     public boolean fromCamera;
 
     public ArrayList<MediaCodecVideoConvertor.MixedSoundInfo> mixedSoundInfos = new ArrayList<>();
@@ -121,6 +139,8 @@ public class VideoEditedInfo {
         public static final byte TYPE_REACTION = 4;
         public static final byte TYPE_ROUND = 5;
         public static final byte TYPE_MESSAGE = 6;
+        public static final byte TYPE_LINK = 7;
+        public static final byte TYPE_WEATHER = 8;
 
         public byte type;
         public byte subType;
@@ -148,6 +168,7 @@ public class VideoEditedInfo {
         public float textViewHeight;
         public float textViewX;
         public float textViewY;
+        public boolean customTextView;
 
         public TLRPC.Document document;
         public Object parentObject;
@@ -157,6 +178,7 @@ public class VideoEditedInfo {
         public float currentFrame;
         public float framesPerDraw;
         public Bitmap bitmap;
+        public Matrix matrix;
 
         public View view;
         public Canvas canvas;
@@ -166,7 +188,8 @@ public class VideoEditedInfo {
         public boolean firstSeek;
 
         public TL_stories.MediaArea mediaArea;
-        public TLRPC.MessageMedia mediaGeo;
+        public TLRPC.MessageMedia media;
+        public Weather.State weather;
         public float density;
 
         public long roundOffset;
@@ -176,6 +199,8 @@ public class VideoEditedInfo {
 
         public int W, H;
         public ReactionsLayoutInBubble.VisibleReaction visibleReaction;
+
+        public LinkPreview.WebPagePreview linkSettings;
 
         public MediaEntity() {
 
@@ -222,28 +247,34 @@ public class VideoEditedInfo {
             if (type == TYPE_LOCATION) {
                 density = data.readFloat(exception);
                 mediaArea = TL_stories.MediaArea.TLdeserialize(data, data.readInt32(exception), exception);
-                mediaGeo = TLRPC.MessageMedia.TLdeserialize(data, data.readInt32(exception), exception);
+                media = TLRPC.MessageMedia.TLdeserialize(data, data.readInt32(exception), exception);
                 if (data.remaining() > 0) {
                     int magic = data.readInt32(exception);
                     if (magic == 0xdeadbeef) {
                         String emoji = data.readString(exception);
-                        if (mediaGeo instanceof TLRPC.TL_messageMediaVenue) {
-                            ((TLRPC.TL_messageMediaVenue) mediaGeo).emoji = emoji;
+                        if (media instanceof TLRPC.TL_messageMediaVenue) {
+                            ((TLRPC.TL_messageMediaVenue) media).emoji = emoji;
                         }
                     }
                 }
-            }
-            if (type == TYPE_REACTION) {
+            } else if (type == TYPE_LINK) {
+                density = data.readFloat(exception);
                 mediaArea = TL_stories.MediaArea.TLdeserialize(data, data.readInt32(exception), exception);
-            }
-            if (type == TYPE_ROUND) {
+                linkSettings = LinkPreview.WebPagePreview.TLdeserialize(data, data.readInt32(exception), exception);
+            } else if (type == TYPE_REACTION) {
+                mediaArea = TL_stories.MediaArea.TLdeserialize(data, data.readInt32(exception), exception);
+            } else if (type == TYPE_ROUND) {
                 roundOffset = data.readInt64(exception);
                 roundLeft = data.readInt64(exception);
                 roundRight = data.readInt64(exception);
                 roundDuration = data.readInt64(exception);
-            }
-            if (type == TYPE_PHOTO) {
+            } else if (type == TYPE_PHOTO) {
                 segmentedPath = data.readString(exception);
+            } else if (type == TYPE_WEATHER) {
+                int magic = data.readInt32(exception);
+                if (magic == 0x7EA7539) {
+                    weather = Weather.State.TLdeserialize(data);
+                }
             }
         }
 
@@ -281,34 +312,42 @@ public class VideoEditedInfo {
             if (type == TYPE_LOCATION) {
                 data.writeFloat(density);
                 mediaArea.serializeToStream(data);
-                if (mediaGeo.provider == null) {
-                    mediaGeo.provider = "";
+                if (media.provider == null) {
+                    media.provider = "";
                 }
-                if (mediaGeo.venue_id == null) {
-                    mediaGeo.venue_id = "";
+                if (media.venue_id == null) {
+                    media.venue_id = "";
                 }
-                if (mediaGeo.venue_type == null) {
-                    mediaGeo.venue_type = "";
+                if (media.venue_type == null) {
+                    media.venue_type = "";
                 }
-                mediaGeo.serializeToStream(data);
-                if (mediaGeo instanceof TLRPC.TL_messageMediaVenue && ((TLRPC.TL_messageMediaVenue) mediaGeo).emoji != null) {
+                media.serializeToStream(data);
+                if (media instanceof TLRPC.TL_messageMediaVenue && ((TLRPC.TL_messageMediaVenue) media).emoji != null) {
                     data.writeInt32(0xdeadbeef);
-                    data.writeString(((TLRPC.TL_messageMediaVenue) mediaGeo).emoji);
+                    data.writeString(((TLRPC.TL_messageMediaVenue) media).emoji);
                 } else {
                     data.writeInt32(TLRPC.TL_null.constructor);
                 }
-            }
-            if (type == TYPE_REACTION) {
+            } else if (type == TYPE_LINK) {
+                data.writeFloat(density);
                 mediaArea.serializeToStream(data);
-            }
-            if (type == TYPE_ROUND) {
+                linkSettings.serializeToStream(data);
+            } else if (type == TYPE_REACTION) {
+                mediaArea.serializeToStream(data);
+            } else if (type == TYPE_ROUND) {
                 data.writeInt64(roundOffset);
                 data.writeInt64(roundLeft);
                 data.writeInt64(roundRight);
                 data.writeInt64(roundDuration);
-            }
-            if (type == TYPE_PHOTO) {
+            } else if (type == TYPE_PHOTO) {
                 data.writeString(segmentedPath);
+            } else if (type == TYPE_WEATHER) {
+                if (weather == null) {
+                    data.writeInt32(0xdeadbeef);
+                } else {
+                    data.writeInt32(0x7EA7539);
+                    weather.serializeToStream(data);
+                }
             }
         }
 
@@ -352,7 +391,7 @@ public class VideoEditedInfo {
             entity.animatedFileDrawable = animatedFileDrawable;
             entity.roundRadiusCanvas = roundRadiusCanvas;
             entity.mediaArea = mediaArea;
-            entity.mediaGeo = mediaGeo;
+            entity.media = media;
             entity.density = density;
             entity.W = W;
             entity.H = H;
@@ -361,6 +400,8 @@ public class VideoEditedInfo {
             entity.roundDuration = roundDuration;
             entity.roundLeft = roundLeft;
             entity.roundRight = roundRight;
+            entity.linkSettings = linkSettings;
+            entity.weather = weather;
             return entity;
         }
     }
@@ -387,7 +428,7 @@ public class VideoEditedInfo {
                 blurPathBytes = null;
             }
             SerializedData serializedData = new SerializedData(len);
-            serializedData.writeInt32(8);
+            serializedData.writeInt32(11);
             serializedData.writeInt64(avatarStartTime);
             serializedData.writeInt32(originalBitrate);
             if (filterState != null) {
@@ -477,6 +518,17 @@ public class VideoEditedInfo {
                 serializedData.writeByteArray(blurPathBytes);
             } else {
                 serializedData.writeByte(0);
+            }
+            serializedData.writeFloat(volume);
+            serializedData.writeBool(isSticker);
+            if (collage != null && collageParts != null && collage.parts.size() > 1 && !collageParts.isEmpty()) {
+                serializedData.writeInt32(0xdeadbeef);
+                serializedData.writeString(collage.toString());
+                for (int i = 0; i < collageParts.size(); ++i) {
+                    collageParts.get(i).serializeToStream(serializedData);
+                }
+            } else {
+                serializedData.writeInt32(TLRPC.TL_null.constructor);
             }
             filters = Utilities.bytesToHex(serializedData.toByteArray());
             serializedData.cleanup();
@@ -605,6 +657,25 @@ public class VideoEditedInfo {
                                 blurPath = new String(bytes);
                             }
                         }
+                        if (version >= 9) {
+                            volume = serializedData.readFloat(false);
+                        }
+                        if (version >= 10) {
+                            isSticker = serializedData.readBool(false);
+                        }
+                        if (version >= 11) {
+                            int magic = serializedData.readInt32(false);
+                            if (magic == 0xdeadbeef) {
+                                collage = new CollageLayout(serializedData.readString(false));
+                                collageParts = new ArrayList<>();
+                                for (int i = 0; i < collage.parts.size(); ++i) {
+                                    Part part = new Part();
+                                    part.part = collage.parts.get(i);
+                                    part.readParams(serializedData, false);
+                                    collageParts.add(part);
+                                }
+                            }
+                        }
                         serializedData.cleanup();
                     }
                 } else {
@@ -638,5 +709,116 @@ public class VideoEditedInfo {
 
     public boolean canAutoPlaySourceVideo() {
         return roundVideo;
+    }
+
+    public static class Part extends TLObject {
+
+        public int flags;
+        public boolean isVideo;
+        public boolean muted;
+        public String path;
+        public float volume = 1.0f;
+        public long offset = 0;
+        public boolean loop = true;
+        public float left, right;
+        public int width, height;
+        public long duration;
+
+        public CollageLayout.Part part;
+
+        public Part() {}
+        public Part(StoryEntry entry) {
+            isVideo = entry.isVideo;
+            muted = entry.muted;
+            path = entry.file.getAbsolutePath();
+            volume = entry.videoVolume;
+            loop = entry.videoLoop;
+            offset = entry.videoOffset;
+            left = entry.videoLeft;
+            right = entry.videoRight;
+            width = entry.width;
+            height = entry.height;
+            duration = entry.duration;
+        }
+
+        public static ArrayList<Part> toParts(StoryEntry collageEntry) {
+            if (collageEntry == null || collageEntry.collageContent == null)
+                return null;
+            final ArrayList<Part> parts = new ArrayList<>();
+            for (int i = 0; i < collageEntry.collageContent.size(); ++i) {
+                final StoryEntry entry = collageEntry.collageContent.get(i);
+                Part part = new Part(entry);
+                part.part = collageEntry.collage.parts.get(i);
+                parts.add(part);
+            }
+            return parts;
+        }
+
+        public static ArrayList<StoryEntry> toStoryEntries(ArrayList<Part> parts) {
+            if (parts == null) return null;
+            final ArrayList<StoryEntry> entries = new ArrayList<>();
+            for (Part part : parts) {
+                final StoryEntry entry = new StoryEntry();
+                entry.isVideo = part.isVideo;
+                entry.muted = part.muted;
+                entry.file = new File(part.path);
+                entry.videoVolume = part.volume;
+                entry.videoLoop = part.loop;
+                entry.videoOffset = part.offset;
+                entry.videoLeft = part.left;
+                entry.videoRight = part.right;
+                entry.width = part.width;
+                entry.height = part.height;
+                entry.duration = part.duration;
+                entries.add(entry);
+            }
+            return entries;
+        }
+
+        @Override
+        public void readParams(AbstractSerializedData stream, boolean exception) {
+            flags = stream.readInt32(exception);
+            isVideo = (flags & 1) != 0;
+            loop = (flags & 2) != 0;
+            muted = (flags & 4) != 0;
+            path = stream.readString(exception);
+            volume = stream.readFloat(exception);
+            offset = stream.readInt64(exception);
+            left = stream.readFloat(exception);
+            right = stream.readFloat(exception);
+            width = stream.readInt32(exception);
+            height = stream.readInt32(exception);
+            duration = stream.readInt64(exception);
+        }
+
+        @Override
+        public void serializeToStream(AbstractSerializedData stream) {
+            flags = isVideo ? flags | 1 : flags &~ 1;
+            flags = loop ? flags | 2 : flags &~ 2;
+            flags = muted ? flags | 4 : flags &~ 4;
+            stream.writeInt32(flags);
+            stream.writeString(path);
+            stream.writeFloat(volume);
+            stream.writeInt64(offset);
+            stream.writeFloat(left);
+            stream.writeFloat(right);
+            stream.writeInt32(width);
+            stream.writeInt32(height);
+            stream.writeInt64(duration);
+        }
+
+        public FloatBuffer posBuffer;
+        public FloatBuffer uvBuffer;
+
+        // software rendering
+        public AnimatedFileDrawable animatedFileDrawable;
+        public float currentFrame;
+        public float framesPerDraw;
+        public float msPerFrame;
+
+        // hardware rendering
+        public SurfaceTexture surfaceTexture;
+        public MediaCodecPlayer player;
+
     }
 }

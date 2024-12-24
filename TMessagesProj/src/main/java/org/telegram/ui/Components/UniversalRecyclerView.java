@@ -8,35 +8,114 @@ import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.DefaultItemAnimator;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Utilities;
+import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
-import org.telegram.ui.Cells.DialogCell;
-import org.telegram.ui.FiltersSetupActivity;
 
 import java.util.ArrayList;
 
 public class UniversalRecyclerView extends RecyclerListView {
 
-    public final LinearLayoutManager layoutManager;
+    public LinearLayoutManager layoutManager;
     public final UniversalAdapter adapter;
     private ItemTouchHelper itemTouchHelper;
+
+    private boolean doNotDetachViews;
+    public void doNotDetachViews() {
+        doNotDetachViews = true;
+    }
+
+    public UniversalRecyclerView(
+        BaseFragment fragment,
+        Utilities.Callback2<ArrayList<UItem>, UniversalAdapter> fillItems,
+        Utilities.Callback5<UItem, View, Integer, Float, Float> onClick,
+        Utilities.Callback5Return<UItem, View, Integer, Float, Float, Boolean> onLongClick
+    ) {
+        this(
+            fragment.getContext(),
+            fragment.getCurrentAccount(),
+            fragment.getClassGuid(),
+            fillItems,
+            onClick,
+            onLongClick,
+            fragment.getResourceProvider()
+        );
+    }
 
     public UniversalRecyclerView(
         Context context,
         int currentAccount,
+        int classGuid,
         Utilities.Callback2<ArrayList<UItem>, UniversalAdapter> fillItems,
         Utilities.Callback5<UItem, View, Integer, Float, Float> onClick,
         Utilities.Callback5Return<UItem, View, Integer, Float, Float, Boolean> onLongClick,
         Theme.ResourcesProvider resourcesProvider
     ) {
+        this(context, currentAccount, classGuid, false, fillItems, onClick, onLongClick, resourcesProvider);
+    }
+
+    public UniversalRecyclerView(
+        Context context,
+        int currentAccount,
+        int classGuid,
+        boolean dialog,
+        Utilities.Callback2<ArrayList<UItem>, UniversalAdapter> fillItems,
+        Utilities.Callback5<UItem, View, Integer, Float, Float> onClick,
+        Utilities.Callback5Return<UItem, View, Integer, Float, Float, Boolean> onLongClick,
+        Theme.ResourcesProvider resourcesProvider
+    ) {
+        this(context, currentAccount, classGuid, dialog, fillItems, onClick, onLongClick, resourcesProvider, UItem.MAX_SPAN_COUNT);
+    }
+
+    public UniversalRecyclerView(
+        Context context,
+        int currentAccount,
+        int classGuid,
+        boolean dialog,
+        Utilities.Callback2<ArrayList<UItem>, UniversalAdapter> fillItems,
+        Utilities.Callback5<UItem, View, Integer, Float, Float> onClick,
+        Utilities.Callback5Return<UItem, View, Integer, Float, Float, Boolean> onLongClick,
+        Theme.ResourcesProvider resourcesProvider,
+        int spansCount
+    ) {
         super(context, resourcesProvider);
-        setLayoutManager(layoutManager = new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false));
-        setAdapter(adapter = new UniversalAdapter(context, currentAccount, fillItems, resourcesProvider));
+
+        if (spansCount == UItem.MAX_SPAN_COUNT) {
+            setLayoutManager(layoutManager = new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false) {
+                @Override
+                protected int getExtraLayoutSpace(State state) {
+                    if (doNotDetachViews) return AndroidUtilities.displaySize.y;
+                    return super.getExtraLayoutSpace(state);
+                }
+            });
+        } else {
+            ExtendedGridLayoutManager layoutManager1 = new ExtendedGridLayoutManager(context, spansCount) {
+                @Override
+                protected int getExtraLayoutSpace(State state) {
+                    if (doNotDetachViews) return AndroidUtilities.displaySize.y;
+                    return super.getExtraLayoutSpace(state);
+                }
+            };
+            layoutManager1.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+                @Override
+                public int getSpanSize(int position) {
+                    if (adapter == null)
+                        return layoutManager1.getSpanCount();
+                    final UItem item = adapter.getItem(position);
+                    if (item == null || item.spanCount == UItem.MAX_SPAN_COUNT)
+                        return layoutManager1.getSpanCount();
+                    return item.spanCount;
+                }
+            });
+            setLayoutManager(layoutManager = layoutManager1);
+        }
+        setAdapter(adapter = new UniversalAdapter(this, context, currentAccount, classGuid, dialog, fillItems, resourcesProvider));
 
         if (onClick != null) {
             setOnItemClickListener((view, position, x, y) -> {
@@ -66,8 +145,32 @@ public class UniversalRecyclerView extends RecyclerListView {
         itemAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
         itemAnimator.setDurations(350);
         setItemAnimator(itemAnimator);
+    }
 
-        setTranslateSelector(true);
+    public void setSpanCount(int spanCount) {
+        if (layoutManager instanceof ExtendedGridLayoutManager) {
+            ((ExtendedGridLayoutManager) layoutManager).setSpanCount(spanCount);
+        } else if (layoutManager instanceof LinearLayoutManager && spanCount != UItem.MAX_SPAN_COUNT) {
+            ExtendedGridLayoutManager layoutManager1 = new ExtendedGridLayoutManager(getContext(), spanCount) {
+                @Override
+                protected int getExtraLayoutSpace(State state) {
+                    if (doNotDetachViews) return AndroidUtilities.displaySize.y;
+                    return super.getExtraLayoutSpace(state);
+                }
+            };
+            layoutManager1.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+                @Override
+                public int getSpanSize(int position) {
+                    if (adapter == null)
+                        return layoutManager1.getSpanCount();
+                    final UItem item = adapter.getItem(position);
+                    if (item == null || item.spanCount == UItem.MAX_SPAN_COUNT)
+                        return layoutManager1.getSpanCount();
+                    return item.spanCount;
+                }
+            });
+            setLayoutManager(layoutManager = layoutManager1);
+        }
     }
 
     private boolean reorderingAllowed;
@@ -108,6 +211,18 @@ public class UniversalRecyclerView extends RecyclerListView {
         for (int i = 0; i < adapter.getItemCount(); ++i) {
             UItem item = adapter.getItem(i);
             if (item != null && item.id == itemId) {
+                position = i;
+                break;
+            }
+        }
+        return findViewByPosition(position);
+    }
+
+    public View findViewByItemObject(Object object) {
+        int position = -1;
+        for (int i = 0; i < adapter.getItemCount(); ++i) {
+            UItem item = adapter.getItem(i);
+            if (item != null && item.object == object) {
                 position = i;
                 break;
             }

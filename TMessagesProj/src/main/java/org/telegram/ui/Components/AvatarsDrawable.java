@@ -17,6 +17,8 @@ import androidx.core.graphics.ColorUtils;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.DialogObject;
+import org.telegram.messenger.FileLoader;
+import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
@@ -25,6 +27,7 @@ import org.telegram.messenger.voip.VoIPService;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
+import org.telegram.tgnet.tl.TL_stories;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.GroupCallUserCell;
 import org.telegram.ui.Stories.StoriesGradientTools;
@@ -56,6 +59,7 @@ public class AvatarsDrawable {
     public int count;
     public int height;
     public int width;
+    public int strokeWidth = AndroidUtilities.dp(1.67f);
 
     View parent;
     private int overrideSize;
@@ -264,12 +268,14 @@ public class AvatarsDrawable {
         for (int a = 0; a < 3; a++) {
             currentStates[a] = new DrawingState();
             currentStates[a].imageReceiver = new ImageReceiver(parent);
+            currentStates[a].imageReceiver.setInvalidateAll(true);
             currentStates[a].imageReceiver.setRoundRadius(AndroidUtilities.dp(12));
             currentStates[a].avatarDrawable = new AvatarDrawable();
             currentStates[a].avatarDrawable.setTextSize(AndroidUtilities.dp(12));
 
             animatingStates[a] = new DrawingState();
             animatingStates[a].imageReceiver = new ImageReceiver(parent);
+            animatingStates[a].imageReceiver.setInvalidateAll(true);
             animatingStates[a].imageReceiver.setRoundRadius(AndroidUtilities.dp(12));
             animatingStates[a].avatarDrawable = new AvatarDrawable();
             animatingStates[a].avatarDrawable.setTextSize(AndroidUtilities.dp(12));
@@ -338,14 +344,35 @@ public class AvatarsDrawable {
                 animatingStates[index].avatarDrawable.setInfo(account, currentUser);
             }
             animatingStates[index].id = currentUser.id;
-        } else {
+        } else if (object instanceof TLRPC.Chat) {
             currentChat = (TLRPC.Chat) object;
             animatingStates[index].avatarDrawable.setAvatarType(AvatarDrawable.AVATAR_TYPE_NORMAL);
             animatingStates[index].avatarDrawable.setScaleSize(1f);
             animatingStates[index].avatarDrawable.setInfo(account, currentChat);
             animatingStates[index].id = -currentChat.id;
         }
-        if (currentUser != null) {
+        int size = getSize();
+        if (object instanceof TL_stories.StoryItem) {
+            TL_stories.StoryItem story = (TL_stories.StoryItem) object;
+            animatingStates[index].id = story.id;
+            if (story.media.document != null) {
+                TLRPC.PhotoSize photoSize1 = FileLoader.getClosestPhotoSizeWithSize(story.media.document.thumbs, 50, true, null, false);
+                TLRPC.PhotoSize photoSize2 = FileLoader.getClosestPhotoSizeWithSize(story.media.document.thumbs, 50, true, photoSize1, true);
+                animatingStates[index].imageReceiver.setImage(
+                    ImageLocation.getForDocument(photoSize2, story.media.document), size + "_" + size,
+                    ImageLocation.getForDocument(photoSize1, story.media.document), size + "_" + size,
+                    0, null, story, 0
+                );
+            } else if (story.media.photo != null) {
+                TLRPC.PhotoSize photoSize1 = FileLoader.getClosestPhotoSizeWithSize(story.media.photo.sizes, 50, true, null, false);
+                TLRPC.PhotoSize photoSize2 = FileLoader.getClosestPhotoSizeWithSize(story.media.photo.sizes, 50, true, photoSize1, true);
+                animatingStates[index].imageReceiver.setImage(
+                    ImageLocation.getForPhoto(photoSize2, story.media.photo), size + "_" + size,
+                    ImageLocation.getForPhoto(photoSize1, story.media.photo), size + "_" + size,
+                    0, null, story, 0
+                );
+            }
+        } else if (currentUser != null) {
             if (currentUser.self && showSavedMessages) {
                 animatingStates[index].imageReceiver.setImageBitmap(animatingStates[index].avatarDrawable);
             } else {
@@ -354,7 +381,6 @@ public class AvatarsDrawable {
         } else {
             animatingStates[index].imageReceiver.setForUserOrChat(currentChat, animatingStates[index].avatarDrawable);
         }
-        int size = getSize();
         animatingStates[index].imageReceiver.setRoundRadius(size / 2);
         animatingStates[index].imageReceiver.setImageCoords(0, 0, size, size);
         invalidate();
@@ -588,7 +614,7 @@ public class AvatarsDrawable {
                         states[a].wavesDrawable.draw(canvas, imageReceiver.getCenterX(), imageReceiver.getCenterY(), parent);
                         avatarScale = states[a].wavesDrawable.getAvatarScale();
                     } else {
-                        float rad = getSize() / 2f + AndroidUtilities.dp(2);
+                        float rad = getSize() / 2f + strokeWidth;
                         if (useAlphaLayer) {
                             canvas.drawCircle(imageReceiver.getCenterX(), imageReceiver.getCenterY(), rad, xRefP);
                         } else {

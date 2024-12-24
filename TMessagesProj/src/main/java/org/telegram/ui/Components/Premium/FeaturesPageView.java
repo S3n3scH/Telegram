@@ -25,7 +25,6 @@ import androidx.core.graphics.ColorUtils;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
-import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.R;
@@ -70,13 +69,13 @@ public class FeaturesPageView extends BaseListPageView {
         SparseIntArray order = null;
         if (type == FEATURES_STORIES) {
             itemsTmp.add(new Item(VIEW_TYPE_ITEM, R.drawable.msg_stories_order,
-                    LocaleController.getString("PremiumStoriesPriority", R.string.PremiumStoriesPriority),
-                    LocaleController.getString("PremiumStoriesPriorityDescription", R.string.PremiumStoriesPriorityDescription),
+                    LocaleController.getString(R.string.PremiumStoriesPriority),
+                    LocaleController.getString(R.string.PremiumStoriesPriorityDescription),
                     PremiumPreviewFragment.PREMIUM_FEATURE_STORIES_PRIORITY_ORDER
             ));
             itemsTmp.add(new Item(VIEW_TYPE_ITEM, R.drawable.msg_stories_stealth,
-                    LocaleController.getString("PremiumStoriesStealth", R.string.PremiumStoriesStealth),
-                    LocaleController.getString("PremiumStoriesStealthDescription", R.string.PremiumStoriesStealthDescription),
+                    LocaleController.getString(R.string.PremiumStoriesStealth),
+                    LocaleController.getString(R.string.PremiumStoriesStealthDescription),
                     PremiumPreviewFragment.PREMIUM_FEATURE_STORIES_STEALTH_MODE
             ));
             itemsTmp.add(new Item(VIEW_TYPE_ITEM, R.drawable.menu_quality_hd,
@@ -85,28 +84,28 @@ public class FeaturesPageView extends BaseListPageView {
                     PremiumPreviewFragment.PREMIUM_FEATURE_STORIES_QUALITY
             ));
             itemsTmp.add(new Item(VIEW_TYPE_ITEM, R.drawable.msg_stories_views,
-                    LocaleController.getString("PremiumStoriesViews", R.string.PremiumStoriesViews),
-                    LocaleController.getString("PremiumStoriesViewsDescription", R.string.PremiumStoriesViewsDescription),
+                    LocaleController.getString(R.string.PremiumStoriesViews),
+                    LocaleController.getString(R.string.PremiumStoriesViewsDescription),
                     PremiumPreviewFragment.PREMIUM_FEATURE_STORIES_VIEWS_HISTORY
             ));
             itemsTmp.add(new Item(VIEW_TYPE_ITEM, R.drawable.msg_stories_timer,
-                    LocaleController.getString("PremiumStoriesExpiration", R.string.PremiumStoriesExpiration),
-                    LocaleController.getString("PremiumStoriesExpirationDescription", R.string.PremiumStoriesExpirationDescription),
+                    LocaleController.getString(R.string.PremiumStoriesExpiration),
+                    LocaleController.getString(R.string.PremiumStoriesExpirationDescription),
                     PremiumPreviewFragment.PREMIUM_FEATURE_STORIES_EXPIRATION_DURATION
             ));
             itemsTmp.add(new Item(VIEW_TYPE_ITEM, R.drawable.msg_stories_save,
-                    LocaleController.getString("PremiumStoriesSaveToGallery", R.string.PremiumStoriesSaveToGallery),
-                    LocaleController.getString("PremiumStoriesSaveToGalleryDescription", R.string.PremiumStoriesSaveToGalleryDescription),
+                    LocaleController.getString(R.string.PremiumStoriesSaveToGallery),
+                    LocaleController.getString(R.string.PremiumStoriesSaveToGalleryDescription),
                     PremiumPreviewFragment.PREMIUM_FEATURE_STORIES_SAVE_TO_GALLERY
             ));
             itemsTmp.add(new Item(VIEW_TYPE_ITEM, R.drawable.msg_stories_caption,
-                    LocaleController.getString("PremiumStoriesCaption", R.string.PremiumStoriesCaption),
-                    LocaleController.getString("PremiumStoriesCaptionDescription", R.string.PremiumStoriesCaptionDescription),
+                    LocaleController.getString(R.string.PremiumStoriesCaption),
+                    LocaleController.getString(R.string.PremiumStoriesCaptionDescription),
                     PremiumPreviewFragment.PREMIUM_FEATURE_STORIES_CAPTION
             ));
             itemsTmp.add(new Item(VIEW_TYPE_ITEM, R.drawable.msg_stories_link,
-                    LocaleController.getString("PremiumStoriesFormatting", R.string.PremiumStoriesFormatting),
-                    LocaleController.getString("PremiumStoriesFormattingDescription", R.string.PremiumStoriesFormattingDescription),
+                    LocaleController.getString(R.string.PremiumStoriesFormatting),
+                    LocaleController.getString(R.string.PremiumStoriesFormattingDescription),
                     PremiumPreviewFragment.PREMIUM_FEATURE_STORIES_LINKS_AND_FORMATTING
             ));
         } else if (type == FEATURES_BUSINESS) {
@@ -137,9 +136,19 @@ public class FeaturesPageView extends BaseListPageView {
                     PremiumPreviewFragment.PREMIUM_FEATURE_BUSINESS_AWAY_MESSAGES
             ));
             itemsTmp.add(new Item(VIEW_TYPE_ITEM, R.drawable.menu_premium_chatbot,
-                    LocaleController.getString(R.string.PremiumBusinessChatbots),
+                    LocaleController.getString(R.string.PremiumBusinessChatbots2),
                     LocaleController.getString(R.string.PremiumBusinessChatbotsDescription),
                     PremiumPreviewFragment.PREMIUM_FEATURE_BUSINESS_CHATBOTS
+            ));
+            itemsTmp.add(new Item(VIEW_TYPE_ITEM, R.drawable.menu_feature_intro,
+                    LocaleController.getString(R.string.PremiumBusinessIntro),
+                    LocaleController.getString(R.string.PremiumBusinessIntroDescription),
+                    PremiumPreviewFragment.PREMIUM_FEATURE_BUSINESS_INTRO
+            ));
+            itemsTmp.add(new Item(VIEW_TYPE_ITEM, R.drawable.menu_premium_chatlink,
+                    LocaleController.getString(R.string.PremiumBusinessChatLinks),
+                    LocaleController.getString(R.string.PremiumBusinessChatLinksDescription),
+                    PremiumPreviewFragment.PREMIUM_FEATURE_BUSINESS_CHAT_LINKS
             ));
         }
         if (order != null) {
@@ -268,9 +277,9 @@ public class FeaturesPageView extends BaseListPageView {
 
                 TextView textView = new TextView(context);
                 textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-                textView.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+                textView.setTypeface(AndroidUtilities.bold());
                 textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
-                textView.setText(LocaleController.getString("UpgradedStories", R.string.UpgradedStories));
+                textView.setText(LocaleController.getString(R.string.UpgradedStories));
                 addView(textView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 111, 0, 0));
 
                 gradientTools.isLinear = true;
@@ -326,7 +335,7 @@ public class FeaturesPageView extends BaseListPageView {
                 Canvas canvas = new Canvas(bitmap);
                 canvas.drawColor(ColorUtils.blendARGB(Theme.getColor(Theme.key_premiumGradient2, resourcesProvider), Theme.getColor(Theme.key_dialogBackground, resourcesProvider), 0.5f));
                 iconTextureView.setBackgroundBitmap(bitmap);
-                iconTextureView.mRenderer.forceNight = true;
+//                iconTextureView.mRenderer.forceNight = true;
                 iconTextureView.mRenderer.colorKey1 = Theme.key_premiumGradient2;
                 iconTextureView.mRenderer.colorKey2 = Theme.key_premiumGradient1;
                 iconTextureView.mRenderer.updateColors();
@@ -338,18 +347,18 @@ public class FeaturesPageView extends BaseListPageView {
 
                 TextView textView = new TextView(context);
                 textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-                textView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
+                textView.setTypeface(AndroidUtilities.bold());
                 textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
                 textView.setText(LocaleController.getString(R.string.TelegramBusiness));
                 textView.setGravity(Gravity.CENTER);
-                addView(textView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 150, 0, 0));
+                addView(textView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 33, 150, 33, 0));
 
                 textView = new TextView(context);
                 textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
                 textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider));
                 textView.setText(LocaleController.getString(R.string.TelegramBusinessSubtitle2));
                 textView.setGravity(Gravity.CENTER);
-                addView(textView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 183, 0, 20));
+                addView(textView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 33, 183, 33, 20));
 
             }
         }
@@ -394,7 +403,7 @@ public class FeaturesPageView extends BaseListPageView {
             addView(imageView, LayoutHelper.createFrame(28, 28, 0, 25, 12, 16, 0));
 
             textView = new TextView(context);
-            textView.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+            textView.setTypeface(AndroidUtilities.bold());
             textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
             addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 68, 8, 16, 0));

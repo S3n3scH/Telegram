@@ -173,9 +173,9 @@ public class CameraController implements MediaRecorder.OnInfoListener {
                             List<Camera.Size> list = params.getSupportedPreviewSizes();
                             for (int a = 0; a < list.size(); a++) {
                                 Camera.Size size = list.get(a);
-                                if (size.width == 1280 && size.height != 720) {
-                                    continue;
-                                }
+//                                if (size.width == 1280 && size.height != 720) {
+//                                    continue;
+//                                }
                                 if (size.height < 2160 && size.width < 2160) {
                                     cameraInfo.previewSizes.add(new Size(size.width, size.height));
                                     if (BuildVars.LOGS_ENABLED) {
@@ -187,9 +187,9 @@ public class CameraController implements MediaRecorder.OnInfoListener {
                             list = params.getSupportedPictureSizes();
                             for (int a = 0; a < list.size(); a++) {
                                 Camera.Size size = list.get(a);
-                                if (size.width == 1280 && size.height != 720) {
-                                    continue;
-                                }
+//                                if (size.width == 1280 && size.height != 720) {
+//                                    continue;
+//                                }
                                 if (!"samsung".equals(Build.MANUFACTURER) || !"jflteuc".equals(Build.PRODUCT) || size.width < 2048) {
                                     cameraInfo.pictureSizes.add(new Size(size.width, size.height));
                                     if (BuildVars.LOGS_ENABLED) {
@@ -553,6 +553,22 @@ public class CameraController implements MediaRecorder.OnInfoListener {
                     camera = session.cameraInfo.camera = Camera.open(session.cameraInfo.cameraId);
                 }
                 Camera.Parameters params = camera.getParameters();
+
+                List<String> rawFlashModes = params.getSupportedFlashModes();
+                session.availableFlashModes.clear();
+                if (rawFlashModes != null) {
+                    for (int a = 0; a < rawFlashModes.size(); a++) {
+                        String rawFlashMode = rawFlashModes.get(a);
+                        if (rawFlashMode.equals(Camera.Parameters.FLASH_MODE_OFF) || rawFlashMode.equals(Camera.Parameters.FLASH_MODE_ON) || rawFlashMode.equals(Camera.Parameters.FLASH_MODE_AUTO)) {
+                            session.availableFlashModes.add(rawFlashMode);
+                        }
+                    }
+                    if (!TextUtils.equals(session.getCurrentFlashMode(), params.getFlashMode()) || !session.availableFlashModes.contains(session.getCurrentFlashMode())) {
+                        session.checkFlashMode(session.availableFlashModes.get(0));
+                    } else {
+                        session.checkFlashMode(session.getCurrentFlashMode());
+                    }
+                }
 
                 session.configureRoundCamera(true);
                 if (configureCallback != null) {

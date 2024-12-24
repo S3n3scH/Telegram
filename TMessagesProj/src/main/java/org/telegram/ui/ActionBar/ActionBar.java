@@ -76,7 +76,7 @@ public class ActionBar extends FrameLayout {
     }
 
     private INavigationLayout.BackButtonState backButtonState = INavigationLayout.BackButtonState.BACK;
-    private ImageView backButtonImageView;
+    public ImageView backButtonImageView;
     private BackupImageView avatarSearchImageView;
     private Drawable backButtonDrawable;
     private SimpleTextView[] titleTextView = new SimpleTextView[2];
@@ -198,7 +198,7 @@ public class ActionBar extends FrameLayout {
                 actionBarMenuOnItemClick.onItemClick(-1);
             }
         });
-        backButtonImageView.setContentDescription(LocaleController.getString("AccDescrGoBack", R.string.AccDescrGoBack));
+        backButtonImageView.setContentDescription(LocaleController.getString(R.string.AccDescrGoBack));
     }
 
     public Drawable getBackButtonDrawable() {
@@ -420,7 +420,7 @@ public class ActionBar extends FrameLayout {
         } else {
             titleTextView[i].setTextColor(getThemedColor(Theme.key_actionBarDefaultTitle));
         }
-        titleTextView[i].setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+        titleTextView[i].setTypeface(AndroidUtilities.bold());
         titleTextView[i].setDrawablePadding(dp(4));
         titleTextView[i].setPadding(0, dp(8), 0, dp(8));
         titleTextView[i].setRightDrawableTopPadding(-dp(1));
@@ -644,20 +644,6 @@ public class ActionBar extends FrameLayout {
         return actionMode;
     }
 
-    public void onDrawCrossfadeBackground(Canvas canvas) {
-        if (blurredBackground && actionBarColor != Color.TRANSPARENT) {
-            rectTmp.set(0, 0, getMeasuredWidth(), getMeasuredHeight());
-            blurScrimPaint.setColor(actionBarColor);
-            contentView.drawBlurRect(canvas, getY(), rectTmp, blurScrimPaint, true);
-        } else {
-            Drawable drawable = getBackground();
-            if (drawable != null) {
-                drawable.setBounds(0, 0, getWidth(), getHeight());
-                drawable.draw(canvas);
-            }
-        }
-    }
-
     public void onDrawCrossfadeContent(Canvas canvas, boolean front, boolean hideBackDrawable, float progress) {
         for (int i = 0; i < getChildCount(); i++) {
             View ch = getChildAt(i);
@@ -718,6 +704,9 @@ public class ActionBar extends FrameLayout {
             actionModeHidingViews = hidingViews;
             if (occupyStatusBar && actionModeTop != null && !SharedConfig.noStatusBar) {
                 animators.add(ObjectAnimator.ofFloat(actionModeTop, View.ALPHA, 0.0f, 1.0f));
+            }
+            if (actionModeExtraView != null) {
+                animators.add(ObjectAnimator.ofFloat(actionModeExtraView, View.TRANSLATION_Y, 0));
             }
             if (SharedConfig.noStatusBar) {
                 if (ColorUtils.calculateLuminance(actionModeColor) < 0.7f) {
@@ -807,6 +796,9 @@ public class ActionBar extends FrameLayout {
                 actionModeTranslationView = translationView;
             }
             actionModeExtraView = extraView;
+            if (actionModeExtraView != null) {
+                actionModeExtraView.setTranslationY(0);
+            }
             actionModeShowingView = showingView;
             actionModeHidingViews = hidingViews;
             if (occupyStatusBar && actionModeTop != null && !SharedConfig.noStatusBar) {
@@ -876,6 +868,9 @@ public class ActionBar extends FrameLayout {
         }
         if (occupyStatusBar && actionModeTop != null && !SharedConfig.noStatusBar) {
             animators.add(ObjectAnimator.ofFloat(actionModeTop, View.ALPHA, 0.0f));
+        }
+        if (actionModeExtraView != null) {
+            animators.add(ObjectAnimator.ofFloat(actionModeExtraView, View.TRANSLATION_Y, actionModeExtraView.getMeasuredHeight()));
         }
         if (SharedConfig.noStatusBar) {
             if (actionBarColor == 0) {
@@ -1619,6 +1614,10 @@ public class ActionBar extends FrameLayout {
     }
 
     public void setCastShadows(boolean value) {
+        if (castShadows != value && getParent() instanceof View) {
+            ((View) getParent()).invalidate();
+            invalidate();
+        }
         castShadows = value;
     }
 

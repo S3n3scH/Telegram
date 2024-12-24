@@ -55,6 +55,7 @@ import org.telegram.messenger.R;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
+import org.telegram.tgnet.tl.TL_stats;
 import org.telegram.tgnet.tl.TL_stories;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenu;
@@ -263,7 +264,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             return false;
         }
         if (message.storyItem instanceof TL_stories.TL_storyItemDeleted) {
-            BulletinFactory.of(this).createSimpleBulletin(R.raw.story_bomb1, LocaleController.getString("StoryNotFound", R.string.StoryNotFound)).show();
+            BulletinFactory.of(this).createSimpleBulletin(R.raw.story_bomb1, LocaleController.getString(R.string.StoryNotFound)).show();
             return true;
         }
         return false;
@@ -278,7 +279,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
         FrameLayout frameLayout = (FrameLayout) fragmentView;
 
         emptyView = new EmptyTextProgressView(context);
-        emptyView.setText(LocaleController.getString("NoResult", R.string.NoResult));
+        emptyView.setText(LocaleController.getString(R.string.NoResult));
         emptyView.setVisibility(View.GONE);
 
         progressLayout = new LinearLayout(context);
@@ -291,17 +292,17 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
 
         TextView loadingTitle = new TextView(context);
         loadingTitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-        loadingTitle.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+        loadingTitle.setTypeface(AndroidUtilities.bold());
         loadingTitle.setTextColor(Theme.getColor(Theme.key_player_actionBarTitle, getResourceProvider()));
         loadingTitle.setTag(Theme.key_player_actionBarTitle);
-        loadingTitle.setText(LocaleController.getString("LoadingStats", R.string.LoadingStats));
+        loadingTitle.setText(LocaleController.getString(R.string.LoadingStats));
         loadingTitle.setGravity(Gravity.CENTER_HORIZONTAL);
 
         TextView loadingSubtitle = new TextView(context);
         loadingSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
         loadingSubtitle.setTextColor(Theme.getColor(Theme.key_player_actionBarSubtitle, getResourceProvider()));
         loadingSubtitle.setTag(Theme.key_player_actionBarSubtitle);
-        loadingSubtitle.setText(LocaleController.getString("LoadingStatsDescription", R.string.LoadingStatsDescription));
+        loadingSubtitle.setText(LocaleController.getString(R.string.LoadingStatsDescription));
         loadingSubtitle.setGravity(Gravity.CENTER_HORIZONTAL);
 
         progressLayout.addView(imageView, LayoutHelper.createLinear(120, 120, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 20));
@@ -354,10 +355,10 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                 final ArrayList<Integer> icons = new ArrayList<>();
                 AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), getResourceProvider());
                 if (message.isStory()) {
-                    items.add(isDialog ? LocaleController.getString("OpenProfile", R.string.OpenProfile) : LocaleController.getString("OpenChannel2", R.string.OpenChannel2));
+                    items.add(isDialog ? LocaleController.getString(R.string.OpenProfile) : LocaleController.getString(R.string.OpenChannel2));
                     icons.add(isDialog ? R.drawable.msg_openprofile : R.drawable.msg_channel);
                 } else {
-                    items.add(LocaleController.getString("ViewMessage", R.string.ViewMessage));
+                    items.add(LocaleController.getString(R.string.ViewMessage));
                     icons.add(R.drawable.msg_msgbubble3);
                 }
                 actions.add(0);
@@ -562,7 +563,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
 
     private void setAvatarAndTitle() {
         if (messageObject.isStory()) {
-            avatarContainer.setTitle(LocaleController.getString("StoryStatistics", R.string.StoryStatistics));
+            avatarContainer.setTitle(LocaleController.getString(R.string.StoryStatistics));
             avatarContainer.hideSubtitle();
             avatarContainer.allowDrawStories = true;
             avatarContainer.setStoriesForceState(StoriesUtilities.STATE_HAS_UNREAD);
@@ -577,7 +578,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                 avatarContainer.getAvatarImageView().setScaleY(0.96f);
             }
         } else {
-            avatarContainer.setTitle(LocaleController.getString("PostStatistics", R.string.PostStatistics));
+            avatarContainer.setTitle(LocaleController.getString(R.string.PostStatistics));
             TLRPC.Chat chatLocal = getMessagesController().getChat(chatId);
             if (chatLocal != null && !hasThumb) {
                 avatarContainer.setChatAvatar(chatLocal);
@@ -593,7 +594,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             ActionBarMenu menu = actionBar.createMenu();
             menu.clearItems();
             ActionBarMenuItem headerItem = menu.addItem(0, R.drawable.ic_ab_other);
-            headerItem.addSubItem(1, R.drawable.msg_stats, LocaleController.getString("ViewChannelStats", R.string.ViewChannelStats));
+            headerItem.addSubItem(1, R.drawable.msg_stats, LocaleController.getString(R.string.ViewChannelStats));
         }
     }
 
@@ -606,14 +607,14 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             listViewAdapter.notifyDataSetChanged();
         }
         if (messageObject.isStory()) {
-            TLRPC.TL_stats_getStoryPublicForwards req = new TLRPC.TL_stats_getStoryPublicForwards();
+            TL_stats.TL_getStoryPublicForwards req = new TL_stats.TL_getStoryPublicForwards();
             req.limit = count;
             req.id = messageObject.storyItem.id;
             req.peer = getMessagesController().getInputPeer(-chatId);
             req.offset = nextOffset == null ? "" : nextOffset;
             int reqId = getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
                 if (error == null) {
-                    TLRPC.TL_stats_publicForwards res = (TLRPC.TL_stats_publicForwards) response;
+                    TL_stats.TL_publicForwards res = (TL_stats.TL_publicForwards) response;
                     if ((res.flags & 1) != 0) {
                         nextOffset = res.next_offset;
                     } else {
@@ -628,7 +629,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                     getMessagesController().putChats(res.chats, false);
                     getMessagesController().putUsers(res.users, false);
 
-                    for (TLRPC.PublicForward forward : res.forwards) {
+                    for (TL_stats.PublicForward forward : res.forwards) {
                         if (forward instanceof TL_stories.TL_publicForwardStory) {
                             TL_stories.TL_publicForwardStory forwardStory = (TL_stories.TL_publicForwardStory) forward;
                             forwardStory.story.dialogId = DialogObject.getPeerDialogId(forwardStory.peer);
@@ -636,8 +637,8 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                             MessageObject msg = new MessageObject(currentAccount, forwardStory.story);
                             msg.generateThumbs(false);
                             messages.add(msg);
-                        } else if (forward instanceof TLRPC.TL_publicForwardMessage) {
-                            TLRPC.TL_publicForwardMessage forwardMessage = (TLRPC.TL_publicForwardMessage) forward;
+                        } else if (forward instanceof TL_stats.TL_publicForwardMessage) {
+                            TL_stats.TL_publicForwardMessage forwardMessage = (TL_stats.TL_publicForwardMessage) forward;
                             messages.add(new MessageObject(currentAccount, forwardMessage.message, false, true));
                         }
                     }
@@ -653,7 +654,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             getConnectionsManager().bindRequestToGuid(reqId, classGuid);
             return;
         }
-        TLRPC.TL_stats_getMessagePublicForwards req = new TLRPC.TL_stats_getMessagePublicForwards();
+        TL_stats.TL_getMessagePublicForwards req = new TL_stats.TL_getMessagePublicForwards();
         req.limit = count;
         if (messageObject.messageOwner.fwd_from != null) {
             req.msg_id = messageObject.messageOwner.fwd_from.saved_from_msg_id;
@@ -665,7 +666,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
         req.offset = nextOffset == null ? "" : nextOffset;
         int reqId = getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
             if (error == null) {
-                TLRPC.TL_stats_publicForwards res = (TLRPC.TL_stats_publicForwards) response;
+                TL_stats.TL_publicForwards res = (TL_stats.TL_publicForwards) response;
                 if ((res.flags & 1) != 0) {
                     nextOffset = res.next_offset;
                 } else {
@@ -680,7 +681,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                 getMessagesController().putChats(res.chats, false);
                 getMessagesController().putUsers(res.users, false);
 
-                for (TLRPC.PublicForward forward : res.forwards) {
+                for (TL_stats.PublicForward forward : res.forwards) {
                     if (forward instanceof TL_stories.TL_publicForwardStory) {
                         TL_stories.TL_publicForwardStory forwardStory = (TL_stories.TL_publicForwardStory) forward;
                         forwardStory.story.dialogId = DialogObject.getPeerDialogId(forwardStory.peer);
@@ -688,8 +689,8 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                         MessageObject msg = new MessageObject(currentAccount, forwardStory.story);
                         msg.generateThumbs(false);
                         messages.add(msg);
-                    } else if (forward instanceof TLRPC.TL_publicForwardMessage) {
-                        TLRPC.TL_publicForwardMessage forwardMessage = (TLRPC.TL_publicForwardMessage) forward;
+                    } else if (forward instanceof TL_stats.TL_publicForwardMessage) {
+                        TL_stats.TL_publicForwardMessage forwardMessage = (TL_stats.TL_publicForwardMessage) forward;
                         messages.add(new MessageObject(currentAccount, forwardMessage.message, false, true));
                     }
                 }
@@ -713,7 +714,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             req.peer = getMessagesController().getInputPeer(-chatId);
             reqObject = req;
         } else {
-            TLRPC.TL_stats_getMessageStats req = new TLRPC.TL_stats_getMessageStats();
+            TL_stats.TL_getMessageStats req = new TL_stats.TL_getMessageStats();
             if (messageObject.messageOwner.fwd_from != null) {
                 req.msg_id = messageObject.messageOwner.fwd_from.saved_from_msg_id;
                 req.channel = getMessagesController().getInputChannel(-messageObject.getFromChatId());
@@ -731,23 +732,23 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                 return;
             }
 
-            TLRPC.StatsGraph views_graph;
-            TLRPC.StatsGraph reactions_by_emotion_graph;
+            TL_stats.StatsGraph views_graph;
+            TL_stats.StatsGraph reactions_by_emotion_graph;
             if (response instanceof TL_stories.TL_stats_storyStats) {
                 TL_stories.TL_stats_storyStats res = (TL_stories.TL_stats_storyStats) response;
                 views_graph = res.views_graph;
                 reactions_by_emotion_graph = res.reactions_by_emotion_graph;
             } else {
-                TLRPC.TL_stats_messageStats res = (TLRPC.TL_stats_messageStats) response;
+                TL_stats.TL_messageStats res = (TL_stats.TL_messageStats) response;
                 views_graph = res.views_graph;
                 reactions_by_emotion_graph = res.reactions_by_emotion_graph;
             }
 
-            interactionsViewData = StatisticActivity.createViewData(views_graph, LocaleController.getString("ViewsAndSharesChartTitle", R.string.ViewsAndSharesChartTitle), 1, false);
-            reactionsByEmotionData = StatisticActivity.createViewData(reactions_by_emotion_graph, LocaleController.getString("ReactionsByEmotionChartTitle", R.string.ReactionsByEmotionChartTitle), 2, false);
+            interactionsViewData = StatisticActivity.createViewData(views_graph, LocaleController.getString(R.string.ViewsAndSharesChartTitle), 1, false);
+            reactionsByEmotionData = StatisticActivity.createViewData(reactions_by_emotion_graph, LocaleController.getString(R.string.ReactionsByEmotionChartTitle), 2, false);
             if (interactionsViewData != null && interactionsViewData.chartData.x.length <= 5) {
                 statsLoaded = false;
-                TLRPC.TL_stats_loadAsyncGraph request = new TLRPC.TL_stats_loadAsyncGraph();
+                TL_stats.TL_loadAsyncGraph request = new TL_stats.TL_loadAsyncGraph();
                 request.token = interactionsViewData.zoomToken;
                 request.x = interactionsViewData.chartData.x[interactionsViewData.chartData.x.length - 1];
                 request.flags |= 1;
@@ -755,17 +756,17 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                 final String cacheKey = interactionsViewData.zoomToken + "_" + request.x;
                 int reqId = ConnectionsManager.getInstance(currentAccount).sendRequest(request, (response1, error1) -> {
                     ChartData childData = null;
-                    if (response1 instanceof TLRPC.TL_statsGraph) {
-                        String json = ((TLRPC.TL_statsGraph) response1).json.data;
+                    if (response1 instanceof TL_stats.TL_statsGraph) {
+                        String json = ((TL_stats.TL_statsGraph) response1).json.data;
                         try {
                             childData = StatisticActivity.createChartData(new JSONObject(json), 1, false);
                         } catch (JSONException e) {
                             e.printStackTrace();
                         }
-                    } else if (response1 instanceof TLRPC.TL_statsGraphError) {
+                    } else if (response1 instanceof TL_stats.TL_statsGraphError) {
                         AndroidUtilities.runOnUIThread(() -> {
                             if (getParentActivity() != null) {
-                                Toast.makeText(getParentActivity(), ((TLRPC.TL_statsGraphError) response1).error, Toast.LENGTH_LONG).show();
+                                Toast.makeText(getParentActivity(), ((TL_stats.TL_statsGraphError) response1).error, Toast.LENGTH_LONG).show();
                             }
                         });
                     }
@@ -874,7 +875,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                                 return;
                             }
 
-                            TLRPC.TL_stats_loadAsyncGraph request = new TLRPC.TL_stats_loadAsyncGraph();
+                            TL_stats.TL_loadAsyncGraph request = new TL_stats.TL_loadAsyncGraph();
                             request.token = data.zoomToken;
                             if (x != 0) {
                                 request.x = x;
@@ -888,15 +889,15 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
 
                             int reqId = ConnectionsManager.getInstance(currentAccount).sendRequest(request, (response, error) -> {
                                 ChartData childData = null;
-                                if (response instanceof TLRPC.TL_statsGraph) {
-                                    String json = ((TLRPC.TL_statsGraph) response).json.data;
+                                if (response instanceof TL_stats.TL_statsGraph) {
+                                    String json = ((TL_stats.TL_statsGraph) response).json.data;
                                     try {
                                         childData = StatisticActivity.createChartData(new JSONObject(json), data.graphType, false);
                                     } catch (JSONException e) {
                                         e.printStackTrace();
                                     }
-                                } else if (response instanceof TLRPC.TL_statsGraphError) {
-                                    Toast.makeText(getContext(), ((TLRPC.TL_statsGraphError) response).error, Toast.LENGTH_LONG).show();
+                                } else if (response instanceof TL_stats.TL_statsGraphError) {
+                                    Toast.makeText(getContext(), ((TL_stats.TL_statsGraphError) response).error, Toast.LENGTH_LONG).show();
                                 }
 
                                 ChartData finalChildData = childData;
@@ -933,7 +934,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                         }
 
                         @Override
-                        void loadData(StatisticActivity.ChartViewData viewData) {
+                        protected void loadData(StatisticActivity.ChartViewData viewData) {
                             //  viewData.load(currentAccount, classGuid, );
                         }
                     };
@@ -969,7 +970,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                     if (item.isStory()) {
                         object = DialogObject.isUserDialog(did) ? getMessagesController().getUser(did) : getMessagesController().getChat(-did);
                         boolean isZeroViews = item.storyItem.views == null || item.storyItem.views.views_count == 0;
-                        status = isZeroViews ? LocaleController.getString("NoViews", R.string.NoViews) : LocaleController.formatPluralString("Views", item.storyItem.views.views_count);
+                        status = isZeroViews ? LocaleController.getString(R.string.NoViews) : LocaleController.formatPluralString("Views", item.storyItem.views.views_count);
                         userCell.setData(object, null, status, position != endRow - 1);
                         userCell.setStoryItem(item.storyItem, v -> {
                             if (checkIsDeletedStory(item)) {
@@ -1085,7 +1086,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                     primary[i * 2 + j] = new TextView(context);
                     title[i * 2 + j] = new TextView(context);
 
-                    primary[i * 2 + j].setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
+                    primary[i * 2 + j].setTypeface(AndroidUtilities.bold());
                     primary[i * 2 + j].setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17);
                     title[i * 2 + j].setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
                     title[i * 2 + j].setGravity(Gravity.LEFT);
@@ -1125,7 +1126,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
             }
 
             primary[0].setText(AndroidUtilities.formatWholeNumber(views, 0));
-            title[0].setText(LocaleController.getString("StatisticViews", R.string.StatisticViews));
+            title[0].setText(LocaleController.getString(R.string.StatisticViews));
 
             primary[1].setText(AndroidUtilities.formatWholeNumber(publicChats, 0));
             title[1].setText(LocaleController.formatString("PublicShares", R.string.PublicShares));

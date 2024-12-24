@@ -21,7 +21,6 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
-import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
@@ -39,12 +38,13 @@ import org.telegram.tgnet.NativeByteBuffer;
 import org.telegram.tgnet.RequestDelegate;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
+import org.telegram.tgnet.tl.TL_bots;
 import org.telegram.tgnet.tl.TL_stories;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Adapters.DialogsSearchAdapter;
-import org.telegram.ui.Business.QuickRepliesController;
 import org.telegram.ui.ChatActivity;
 import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble;
+import org.telegram.ui.Components.VideoPlayer;
 import org.telegram.ui.DialogsActivity;
 import org.telegram.ui.EditWidgetActivity;
 
@@ -106,7 +106,7 @@ public class MessagesStorage extends BaseController {
         }
     }
 
-    public final static int LAST_DB_VERSION = 149;
+    public final static int LAST_DB_VERSION = 159;
     private boolean databaseMigrationInProgress;
     public boolean showClearDatabaseAlert;
     private LongSparseIntArray dialogIsForum = new LongSparseIntArray();
@@ -625,8 +625,9 @@ public class MessagesStorage extends BaseController {
         database.executeFast("CREATE TABLE requested_holes(uid INTEGER, seq_out_start INTEGER, seq_out_end INTEGER, PRIMARY KEY (uid, seq_out_start, seq_out_end));").stepThis().dispose();
         database.executeFast("CREATE TABLE sharing_locations(uid INTEGER PRIMARY KEY, mid INTEGER, date INTEGER, period INTEGER, message BLOB, proximity INTEGER);").stepThis().dispose();
 
-        database.executeFast("CREATE TABLE stickersets2(id INTEGER PRIMATE KEY, data BLOB, hash INTEGER, date INTEGER);").stepThis().dispose();
+        database.executeFast("CREATE TABLE stickersets2(id INTEGER PRIMATE KEY, data BLOB, hash INTEGER, date INTEGER, short_name TEXT);").stepThis().dispose();
         database.executeFast("CREATE INDEX IF NOT EXISTS stickersets2_id_index ON stickersets2(id);").stepThis().dispose();
+        database.executeFast("CREATE INDEX IF NOT EXISTS stickersets2_id_short_name ON stickersets2(id, short_name);").stepThis().dispose();
 
         database.executeFast("CREATE INDEX IF NOT EXISTS stickers_featured_emoji_index ON stickers_featured(emoji);").stepThis().dispose();
 
@@ -695,11 +696,12 @@ public class MessagesStorage extends BaseController {
 
         database.executeFast("CREATE TABLE emoji_groups(type INTEGER PRIMARY KEY, data BLOB)").stepThis().dispose();
         database.executeFast("CREATE TABLE app_config(data BLOB)").stepThis().dispose();
+        database.executeFast("CREATE TABLE effects(data BLOB)").stepThis().dispose();
 
         database.executeFast("CREATE TABLE stories (dialog_id INTEGER, story_id INTEGER, data BLOB, custom_params BLOB, PRIMARY KEY (dialog_id, story_id));").stepThis().dispose();
         database.executeFast("CREATE TABLE stories_counter (dialog_id INTEGER PRIMARY KEY, count INTEGER, max_read INTEGER);").stepThis().dispose();
 
-        database.executeFast("CREATE TABLE profile_stories (dialog_id INTEGER, story_id INTEGER, data BLOB, type INTEGER, PRIMARY KEY(dialog_id, story_id));").stepThis().dispose();
+        database.executeFast("CREATE TABLE profile_stories (dialog_id INTEGER, story_id INTEGER, data BLOB, type INTEGER, seen INTEGER, pin INTEGER, PRIMARY KEY(dialog_id, story_id));").stepThis().dispose();
 
         database.executeFast("CREATE TABLE story_drafts (id INTEGER PRIMARY KEY, date INTEGER, data BLOB, type INTEGER);").stepThis().dispose();
 
@@ -721,6 +723,11 @@ public class MessagesStorage extends BaseController {
         database.executeFast("CREATE INDEX IF NOT EXISTS reply_to_idx_quick_replies_messages ON quick_replies_messages(mid, reply_to_message_id);").stepThis().dispose();
         database.executeFast("CREATE INDEX IF NOT EXISTS idx_to_reply_quick_replies_messages ON quick_replies_messages(reply_to_message_id, mid);").stepThis().dispose();
 
+        database.executeFast("CREATE TABLE business_links(data BLOB, order_value INTEGER);").stepThis().dispose();
+        database.executeFast("CREATE TABLE fact_checks(hash INTEGER PRIMARY KEY, data BLOB, expires INTEGER);").stepThis().dispose();
+        database.executeFast("CREATE TABLE popular_bots(uid INTEGER PRIMARY KEY, time INTEGER, offset TEXT);").stepThis().dispose();
+
+        database.executeFast("CREATE TABLE star_gifts2(id INTEGER PRIMARY KEY, data BLOB, hash INTEGER, time INTEGER, pos INTEGER);").stepThis().dispose();
 
         database.executeFast("PRAGMA user_version = " + MessagesStorage.LAST_DB_VERSION).stepThis().dispose();
 
@@ -1311,6 +1318,16 @@ public class MessagesStorage extends BaseController {
         });
     }
 
+    public void deleteAllStoryReactionPushMessages() {
+        storageQueue.postRunnable(() -> {
+            try {
+                database.executeFast("DELETE FROM unread_push_messages WHERE is_reaction = 2").stepThis().dispose();
+            } catch (Exception e) {
+                checkSQLException(e);
+            }
+        });
+    }
+
     public void putPushMessage(MessageObject message) {
         storageQueue.postRunnable(() -> {
             try {
@@ -1349,7 +1366,7 @@ public class MessagesStorage extends BaseController {
                 }
                 state.bindInteger(9, flags);
                 state.bindLong(10, MessageObject.getTopicId(currentAccount, message.messageOwner, false));
-                state.bindInteger(11, message.isReactionPush ? 1 : 0);
+                state.bindInteger(11, (message.isReactionPush ? 1 : 0) + (message.isStoryReactionPush ? 1 : 0));
                 state.step();
 
                 data.reuse();
@@ -1391,6 +1408,9 @@ public class MessagesStorage extends BaseController {
                 database.executeFast("DELETE FROM saved_reaction_tags").stepThis().dispose();
                 database.executeFast("DELETE FROM business_replies").stepThis().dispose();
                 database.executeFast("DELETE FROM quick_replies_messages").stepThis().dispose();
+                database.executeFast("DELETE FROM effects").stepThis().dispose();
+                database.executeFast("DELETE FROM app_config").stepThis().dispose();
+                database.executeFast("DELETE FROM star_gifts2").stepThis().dispose();
 
 
                 cursor = database.queryFinalized("SELECT did FROM dialogs WHERE 1");
@@ -1822,7 +1842,7 @@ public class MessagesStorage extends BaseController {
                         getChatsInternal(TextUtils.join(",", chatsToLoad), chats);
                     }
                     if (!usersToLoad.isEmpty()) {
-                        getUsersInternal(TextUtils.join(",", usersToLoad), users);
+                        getUsersInternal(usersToLoad, users);
                     }
 
                     AndroidUtilities.runOnUIThread(() -> {
@@ -2158,7 +2178,7 @@ public class MessagesStorage extends BaseController {
                     getEncryptedChatsInternal(TextUtils.join(",", encryptedChatIds), encryptedChats, usersToLoad);
                 }
                 if (!usersToLoad.isEmpty()) {
-                    getUsersInternal(TextUtils.join(",", usersToLoad), users);
+                    getUsersInternal(usersToLoad, users);
                 }
                 if (!chatsToLoad.isEmpty()) {
                     getChatsInternal(TextUtils.join(",", chatsToLoad), chats);
@@ -2170,6 +2190,9 @@ public class MessagesStorage extends BaseController {
                     for (int a = 0; a < dialogs.size(); a++) {
                         long did = dialogs.keyAt(a);
                         ReadDialog dialog = dialogs.valueAt(a);
+                        if (getMessagesController().isForum(did)) {
+                            getMessagesController().markAllTopicsAsRead(did);
+                        }
                         getMessagesController().markDialogAsRead(did, dialog.lastMid, dialog.lastMid, dialog.date, false, 0, dialog.unreadCount, true, 0);
                     }
                 });
@@ -2533,7 +2556,7 @@ public class MessagesStorage extends BaseController {
                     getEncryptedChatsInternal(TextUtils.join(",", encryptedToLoad), encryptedChats, usersToLoad);
                 }
                 if (!usersToLoad.isEmpty()) {
-                    getUsersInternal(TextUtils.join(",", usersToLoad), users);
+                    getUsersInternal(usersToLoad, users);
                 }
                 if (!chatsToLoad.isEmpty()) {
                     getChatsInternal(TextUtils.join(",", chatsToLoad), chats);
@@ -2641,7 +2664,7 @@ public class MessagesStorage extends BaseController {
             LongSparseArray<Boolean> mutedDialogs = new LongSparseArray<>();
             LongSparseArray<Boolean> archivedDialogs = new LongSparseArray<>();
             if (!usersToLoad.isEmpty()) {
-                getUsersInternal(TextUtils.join(",", usersToLoad), users);
+                getUsersInternal(usersToLoad, users, true);
                 for (int a = 0, N = users.size(); a < N; a++) {
                     TLRPC.User user = users.get(a);
                     boolean muted = getMessagesController().isDialogMuted(user.id, 0);
@@ -2668,7 +2691,7 @@ public class MessagesStorage extends BaseController {
                 ArrayList<TLRPC.EncryptedChat> encryptedChats = new ArrayList<>();
                 getEncryptedChatsInternal(TextUtils.join(",", encryptedToLoad), encryptedChats, encUsersToLoad);
                 if (!encUsersToLoad.isEmpty()) {
-                    getUsersInternal(TextUtils.join(",", encUsersToLoad), encUsers);
+                    getUsersInternal(encUsersToLoad, encUsers, true);
                     for (int a = 0, N = encUsers.size(); a < N; a++) {
                         TLRPC.User user = encUsers.get(a);
                         encUsersDict.put(user.id, user);
@@ -3322,7 +3345,7 @@ public class MessagesStorage extends BaseController {
                 }
                 ArrayList<TLRPC.User> users = new ArrayList<>();
                 if (!usersToLoad.isEmpty()) {
-                    getUsersInternal(TextUtils.join(",", usersToLoad), users);
+                    getUsersInternal(usersToLoad, users);
                     for (int a = 0, N = users.size(); a < N; a++) {
                         TLRPC.User user = users.get(a);
                         usersToLoadMap.remove(user.id);
@@ -3573,6 +3596,7 @@ public class MessagesStorage extends BaseController {
     public void loadUnreadMessages() {
         storageQueue.postRunnable(() -> {
             SQLiteCursor cursor = null;
+            int magic = 0;
             try {
                 ArrayList<Long> usersToLoad = new ArrayList<>();
                 ArrayList<Long> chatsToLoad = new ArrayList<>();
@@ -3629,7 +3653,8 @@ public class MessagesStorage extends BaseController {
                     while (cursor.next()) {
                         NativeByteBuffer data = cursor.byteBufferValue(1);
                         if (data != null) {
-                            TLRPC.Message message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
+                            magic = data.readInt32(false);
+                            TLRPC.Message message = TLRPC.Message.TLdeserialize(data, magic, false);
                             message.readAttachPath(data, getUserConfig().clientUserId);
                             data.reuse();
                             MessageObject.setUnreadFlags(message, cursor.intValue(0));
@@ -3714,7 +3739,9 @@ public class MessagesStorage extends BaseController {
                             }
 
                             MessageObject messageObject = new MessageObject(currentAccount, message, messageText, name, userName, (flags & 1) != 0, (flags & 2) != 0, (message.flags & 0x80000000) != 0, false);
-                            messageObject.isReactionPush = cursor.intValue(10) != 0;
+                            final int is_reaction = cursor.intValue(10);
+                            messageObject.isReactionPush = is_reaction == 1;
+                            messageObject.isStoryReactionPush = is_reaction == 2;
                             pushMessages.add(messageObject);
                             addUsersAndChatsFromMessage(message, usersToLoad, chatsToLoad, null);
                         }
@@ -3729,7 +3756,7 @@ public class MessagesStorage extends BaseController {
                     }
 
                     if (!usersToLoad.isEmpty()) {
-                        getUsersInternal(TextUtils.join(",", usersToLoad), users);
+                        getUsersInternal(usersToLoad, users);
                     }
 
                     if (!chatsToLoad.isEmpty()) {
@@ -3794,7 +3821,7 @@ public class MessagesStorage extends BaseController {
                 cursor = null;
 
                 if (!usersToLoad.isEmpty()) {
-                    getUsersInternal(TextUtils.join(",", usersToLoad), users);
+                    getUsersInternal(usersToLoad, users);
                 }
 
                 if (!chatsToLoad.isEmpty()) {
@@ -4746,7 +4773,7 @@ public class MessagesStorage extends BaseController {
 //                loadReplyMessages(replyMessageOwners, dialogReplyMessagesIds, usersToLoad, chatsToLoad, false);
 
                 if (!usersToLoad.isEmpty()) {
-                    getUsersInternal(TextUtils.join(",", usersToLoad), users);
+                    getUsersInternal(usersToLoad, users);
                 }
                 if (!chatsToLoad.isEmpty()) {
                     getChatsInternal(TextUtils.join(",", chatsToLoad), chats);
@@ -4876,7 +4903,7 @@ public class MessagesStorage extends BaseController {
 
                 if (a != null && a.results != null && a.reactions_as_tags) {
                     for (int j = 0; j < a.results.size(); ++j) {
-                        ReactionsLayoutInBubble.VisibleReaction reaction = ReactionsLayoutInBubble.VisibleReaction.fromTLReaction(a.results.get(j).reaction);
+                        ReactionsLayoutInBubble.VisibleReaction reaction = ReactionsLayoutInBubble.VisibleReaction.fromTL(a.results.get(j).reaction);
                         if (reaction != null) {
                             oldTags.put(reaction.hash, reaction);
                         }
@@ -4884,7 +4911,7 @@ public class MessagesStorage extends BaseController {
                 }
                 if (b != null && b.results != null && b.reactions_as_tags) {
                     for (int j = 0; j < b.results.size(); ++j) {
-                        ReactionsLayoutInBubble.VisibleReaction reaction = ReactionsLayoutInBubble.VisibleReaction.fromTLReaction(b.results.get(j).reaction);
+                        ReactionsLayoutInBubble.VisibleReaction reaction = ReactionsLayoutInBubble.VisibleReaction.fromTL(b.results.get(j).reaction);
                         if (reaction != null) {
                             newTags.put(reaction.hash, reaction);
                         }
@@ -4928,13 +4955,13 @@ public class MessagesStorage extends BaseController {
             LongSparseArray<ReactionsLayoutInBubble.VisibleReaction> newTags = new LongSparseArray<>();
             if (a != null && a.results != null && a.reactions_as_tags) {
                 for (int i = 0; i < a.results.size(); ++i) {
-                    ReactionsLayoutInBubble.VisibleReaction reaction = ReactionsLayoutInBubble.VisibleReaction.fromTLReaction(a.results.get(i).reaction);
+                    ReactionsLayoutInBubble.VisibleReaction reaction = ReactionsLayoutInBubble.VisibleReaction.fromTL(a.results.get(i).reaction);
                     oldTags.put(reaction.hash, reaction);
                 }
             }
             if (b != null && b.results != null && b.reactions_as_tags) {
                 for (int i = 0; i < b.results.size(); ++i) {
-                    ReactionsLayoutInBubble.VisibleReaction reaction = ReactionsLayoutInBubble.VisibleReaction.fromTLReaction(b.results.get(i).reaction);
+                    ReactionsLayoutInBubble.VisibleReaction reaction = ReactionsLayoutInBubble.VisibleReaction.fromTL(b.results.get(i).reaction);
                     newTags.put(reaction.hash, reaction);
                 }
             }
@@ -5172,7 +5199,7 @@ public class MessagesStorage extends BaseController {
         TLRPC.Message message = new TLRPC.TL_message();
         SQLiteCursor cursor = null;
         try {
-            cursor = database.queryFinalized("SELECT custom_params FROM messages_v2 WHERE mid = " + messageId + " AND uid = " + dialogId);
+            cursor = database.queryFinalized("SELECT custom_params FROM messages_v2 WHERE mid = ? AND uid = ?", messageId, dialogId);
             boolean read = false;
             if (cursor.next()) {
                 MessageCustomParamsHelper.readLocalParams(message, cursor.byteBufferValue(0));
@@ -5181,7 +5208,7 @@ public class MessagesStorage extends BaseController {
             cursor.dispose();
             cursor = null;
             if (!read) {
-                cursor = database.queryFinalized("SELECT custom_params FROM messages_topics WHERE mid = " + messageId + " AND uid = " + dialogId);
+                cursor = database.queryFinalized("SELECT custom_params FROM messages_topics WHERE mid = ? AND uid = ?", messageId, dialogId);
                 if (cursor.next()) {
                     MessageCustomParamsHelper.readLocalParams(message, cursor.byteBufferValue(0));
                     read = true;
@@ -5648,7 +5675,7 @@ public class MessagesStorage extends BaseController {
         LongSparseArray<Boolean> mutedDialogs = new LongSparseArray<>();
         LongSparseArray<Boolean> archivedDialogs = new LongSparseArray<>();
         if (!usersToLoad.isEmpty()) {
-            getUsersInternal(TextUtils.join(",", usersToLoad), users);
+            getUsersInternal(usersToLoad, users);
             for (int a = 0, N = users.size(); a < N; a++) {
                 TLRPC.User user = users.get(a);
                 boolean muted = getMessagesController().isDialogMuted(user.id, 0);
@@ -5676,7 +5703,7 @@ public class MessagesStorage extends BaseController {
             ArrayList<TLRPC.EncryptedChat> encryptedChats = new ArrayList<>();
             getEncryptedChatsInternal(TextUtils.join(",", encryptedToLoad), encryptedChats, encUsersToLoad);
             if (!encUsersToLoad.isEmpty()) {
-                getUsersInternal(TextUtils.join(",", encUsersToLoad), encUsers);
+                getUsersInternal(encUsersToLoad, encUsers);
                 for (int a = 0, N = encUsers.size(); a < N; a++) {
                     TLRPC.User user = encUsers.get(a);
                     encUsersDict.put(user.id, user);
@@ -6708,6 +6735,17 @@ public class MessagesStorage extends BaseController {
                         }
                     }
                 }
+                ArrayList<Long> chatsToLoad = new ArrayList<>();
+                if (info != null && (info.flags2 & 64) != 0 && info.personal_channel_id != 0) {
+                    chatsToLoad.add(info.personal_channel_id);
+                }
+                if (!chatsToLoad.isEmpty()) {
+                    ArrayList<TLRPC.Chat> chats = new ArrayList<>();
+                    getChatsInternal(TextUtils.join(",", chatsToLoad), chats);
+                    AndroidUtilities.runOnUIThread(() -> {
+                        getMessagesController().putChats(chats, true);
+                    });
+                }
             } catch (Exception e) {
                 checkSQLException(e);
             } finally {
@@ -7379,17 +7417,11 @@ public class MessagesStorage extends BaseController {
             cursor.dispose();
             cursor = null;
 
+            ArrayList<Long> usersToLoad = new ArrayList<Long>();
             if (info instanceof TLRPC.TL_chatFull) {
-                StringBuilder usersToLoad = new StringBuilder();
                 for (int a = 0; a < info.participants.participants.size(); a++) {
                     TLRPC.ChatParticipant c = info.participants.participants.get(a);
-                    if (usersToLoad.length() != 0) {
-                        usersToLoad.append(",");
-                    }
-                    usersToLoad.append(c.user_id);
-                }
-                if (usersToLoad.length() != 0) {
-                    getUsersInternal(usersToLoad.toString(), loadedUsers);
+                    usersToLoad.add(c.user_id);
                 }
             } else if (info instanceof TLRPC.TL_channelFull) {
                 cursor = database.queryFinalized("SELECT us.data, us.status, cu.data, cu.date FROM channel_users_v2 as cu LEFT JOIN users as us ON us.uid = cu.uid WHERE cu.did = " + (-chatId) + " ORDER BY cu.date DESC");
@@ -7430,34 +7462,20 @@ public class MessagesStorage extends BaseController {
                 }
                 cursor.dispose();
                 cursor = null;
-                StringBuilder usersToLoad = new StringBuilder();
                 for (int a = 0; a < info.bot_info.size(); a++) {
-                    TLRPC.BotInfo botInfo = info.bot_info.get(a);
-                    if (usersToLoad.length() != 0) {
-                        usersToLoad.append(",");
-                    }
-                    usersToLoad.append(botInfo.user_id);
-                }
-                if (usersToLoad.length() != 0) {
-                    getUsersInternal(usersToLoad.toString(), loadedUsers);
+                    TL_bots.BotInfo botInfo = info.bot_info.get(a);
+                    usersToLoad.add(botInfo.user_id);
                 }
             }
             if (info != null && info.inviterId != 0) {
-                getUsersInternal("" + info.inviterId, loadedUsers);
+                usersToLoad.add(info.inviterId);
             }
             if (info != null && info.recent_requesters != null && !info.recent_requesters.isEmpty()) {
-                StringBuilder usersToLoad = new StringBuilder();
                 for (int i = 0; i < Math.min(3, info.recent_requesters.size()); ++i) {
-                    long uid = info.recent_requesters.get(info.recent_requesters.size() - 1 - i);
-                    if (i > 0) {
-                        usersToLoad.append(',');
-                    }
-                    usersToLoad.append(uid);
-                }
-                if (usersToLoad.length() > 0) {
-                    getUsersInternal(usersToLoad.toString(), loadedUsers);
+                    usersToLoad.add(info.recent_requesters.get(info.recent_requesters.size() - 1 - i));
                 }
             }
+            getUsersInternal(usersToLoad, loadedUsers);
 
             cursor = getMessagesStorage().getDatabase().queryFinalized(String.format(Locale.US, "SELECT mid FROM chat_pinned_v2 WHERE uid = %d ORDER BY mid DESC", -chatId));
             while (cursor.next()) {
@@ -7930,23 +7948,20 @@ public class MessagesStorage extends BaseController {
             SQLiteCursor cursor = null;
             try {
                 cursor = database.queryFinalized("SELECT * FROM contacts WHERE 1");
-                StringBuilder uids = new StringBuilder();
+                ArrayList<Long> uids = new ArrayList<>();
                 while (cursor.next()) {
                     long userId = cursor.intValue(0);
                     TLRPC.TL_contact contact = new TLRPC.TL_contact();
                     contact.user_id = userId;
                     contact.mutual = cursor.intValue(1) == 1;
-                    if (uids.length() != 0) {
-                        uids.append(",");
-                    }
                     contacts.add(contact);
-                    uids.append(contact.user_id);
+                    uids.add(contact.user_id);
                 }
                 cursor.dispose();
                 cursor = null;
 
-                if (uids.length() != 0) {
-                    getUsersInternal(uids.toString(), users);
+                if (!uids.isEmpty()) {
+                    getUsersInternal(uids, users);
                 }
             } catch (Exception e) {
                 contacts.clear();
@@ -7976,6 +7991,7 @@ public class MessagesStorage extends BaseController {
                 ArrayList<Long> usersToLoad = new ArrayList<>();
                 ArrayList<Long> chatsToLoad = new ArrayList<>();
                 ArrayList<Integer> encryptedChatIds = new ArrayList<>();
+                ArrayList<TLRPC.Message> toDelete = new ArrayList<>();
 
                 cursor = database.queryFinalized("SELECT m.read_state, m.data, m.send_state, m.mid, m.date, r.random_id, m.uid, s.seq_in, s.seq_out, m.ttl FROM messages_v2 as m LEFT JOIN randoms_v2 as r ON r.mid = m.mid AND r.uid = m.uid LEFT JOIN messages_seq as s ON m.mid = s.mid WHERE (m.mid < 0 AND m.send_state = 1) OR (m.mid > 0 AND m.send_state = 3) ORDER BY m.mid DESC LIMIT " + count);
                 while (cursor.next()) {
@@ -7996,7 +8012,11 @@ public class MessagesStorage extends BaseController {
                             message.seq_in = cursor.intValue(7);
                             message.seq_out = cursor.intValue(8);
                             message.ttl = cursor.intValue(9);
-                            messages.add(message);
+                            if (message.media instanceof TLRPC.TL_messageMediaPaidMedia) {
+                                toDelete.add(message); // TODO: actually send again
+                            } else {
+                                messages.add(message);
+                            }
                             messageHashMap.put(message.id, message);
 
                             if (DialogObject.isEncryptedDialog(message.dialog_id)) {
@@ -8024,6 +8044,12 @@ public class MessagesStorage extends BaseController {
                 }
                 cursor.dispose();
                 cursor = null;
+
+                if (!toDelete.isEmpty()) {
+                    for (TLRPC.Message msg : toDelete) {
+                        database.executeFast("DELETE FROM messages_v2 WHERE uid = " + msg.dialog_id + " AND mid = " + msg.id).stepThis().dispose();
+                    }
+                }
 
                 cursor = database.queryFinalized("SELECT m.data, m.send_state, m.mid, m.date, r.random_id, m.uid, m.ttl FROM scheduled_messages_v2 as m LEFT JOIN randoms_v2 as r ON r.mid = m.mid AND r.uid = m.uid WHERE (m.mid < 0 AND m.send_state = 1) OR (m.mid > 0 AND m.send_state = 3) ORDER BY date ASC");
                 while (cursor.next()) {
@@ -8135,7 +8161,7 @@ public class MessagesStorage extends BaseController {
                 }
 
                 if (!usersToLoad.isEmpty()) {
-                    getUsersInternal(TextUtils.join(",", usersToLoad), users);
+                    getUsersInternal(usersToLoad, users);
                 }
 
                 if (!chatsToLoad.isEmpty()) {
@@ -8266,7 +8292,7 @@ public class MessagesStorage extends BaseController {
         });
     }
 
-    public Runnable getMessagesInternal(long dialogId, long mergeDialogId, int count, int max_id, int offset_date, int minDate, int classGuid, int load_type, int mode, long threadMessageId, int loadIndex, boolean processMessages, boolean isTopic, MessageLoaderLogger loaderLogger) {
+    public Runnable getMessagesInternal(long dialogId, long mergeDialogId, int count, int max_id, int offset_date, int minDate, int classGuid, int load_type, int mode, long threadMessageId, int loadIndex, boolean processMessages, boolean isTopic, Timer loaderLogger) {
         TLRPC.TL_messages_messages res = new TLRPC.TL_messages_messages();
         long currentUserId = getUserConfig().clientUserId;
         int count_unread = 0;
@@ -9177,7 +9203,7 @@ public class MessagesStorage extends BaseController {
                 loadReplyMessages(replyMessageOwners, dialogReplyMessagesIds, usersToLoad, chatsToLoad, mode);
             }
             if (!usersToLoad.isEmpty()) {
-                getUsersInternal(TextUtils.join(",", usersToLoad), res.users);
+                getUsersInternal(usersToLoad, res.users);
             }
             if (!chatsToLoad.isEmpty()) {
                 getChatsInternal(TextUtils.join(",", chatsToLoad), res.chats);
@@ -9251,19 +9277,16 @@ public class MessagesStorage extends BaseController {
         }
     }
 
-    public void getMessages(long dialogId, long mergeDialogId, boolean loadInfo, int count, int max_id, int offset_date, int minDate, int classGuid, int load_type, int mode, long replyMessageId, int loadIndex, boolean processMessages, boolean isTopic, MessageLoaderLogger loaderLogger) {
+    public void getMessages(long dialogId, long mergeDialogId, boolean loadInfo, int count, int max_id, int offset_date, int minDate, int classGuid, int load_type, int mode, long replyMessageId, int loadIndex, boolean processMessages, boolean isTopic, Timer loaderLogger) {
+        Timer.Task t1 = Timer.start(loaderLogger, "MessagesStorage.getMessages: storageQueue.postRunnable");
         storageQueue.postRunnable(() -> {
-            if (loaderLogger != null) {
-                loaderLogger.logStorageQueuePost();
-            }
+            Timer.done(t1);
+            Timer.Task t2 = Timer.start(loaderLogger, "MessagesStorage.getMessages");
             Runnable processMessagesRunnable = getMessagesInternal(dialogId, mergeDialogId, count, max_id, offset_date, minDate, classGuid, load_type, mode, replyMessageId, loadIndex, processMessages, isTopic, loaderLogger);
-            if (loaderLogger != null) {
-                loaderLogger.logStorageProccessing();
-            }
+            Timer.done(t2);
+            Timer.Task t3 = Timer.start(loaderLogger, "MessagesStorage.getMessages: stageQueue.postRunnable");
             Utilities.stageQueue.postRunnable(() -> {
-                if (loaderLogger != null) {
-                    loaderLogger.logStageQueuePost();
-                }
+                Timer.done(t3);
                 processMessagesRunnable.run();
             });
         });
@@ -9452,7 +9475,7 @@ public class MessagesStorage extends BaseController {
                         getChatsInternal(TextUtils.join(",", chatsToLoad), chats);
                     }
                     if (!usersToLoad.isEmpty()) {
-                        getUsersInternal(TextUtils.join(",", usersToLoad), users);
+                        getUsersInternal(usersToLoad, users);
                     }
                 }
             } catch (Exception e) {
@@ -9574,7 +9597,7 @@ public class MessagesStorage extends BaseController {
                     getChatsInternal(TextUtils.join(",", chatsToLoad), chats);
                 }
                 if (!usersToLoad.isEmpty()) {
-                    getUsersInternal(TextUtils.join(",", usersToLoad), users);
+                    getUsersInternal(usersToLoad, users);
                 }
             } catch (Exception e) {
                 checkSQLException(e);
@@ -9829,7 +9852,7 @@ public class MessagesStorage extends BaseController {
                 getEncryptedChatsInternal("" + chatId, encryptedChats, usersToLoad);
                 if (!encryptedChats.isEmpty() && !usersToLoad.isEmpty()) {
                     ArrayList<TLRPC.User> users = new ArrayList<>();
-                    getUsersInternal(TextUtils.join(",", usersToLoad), users);
+                    getUsersInternal(usersToLoad, users);
                     if (!users.isEmpty()) {
                         result.add(encryptedChats.get(0));
                         result.add(users.get(0));
@@ -10171,29 +10194,87 @@ public class MessagesStorage extends BaseController {
         state.dispose();
     }
 
-    public void getUsersInternal(String usersToLoad, ArrayList<TLRPC.User> result) throws Exception {
-        if (usersToLoad == null || usersToLoad.length() == 0 || result == null) {
+    public void getUsersInternal(ArrayList<Long> userIds, ArrayList<TLRPC.User> result) throws Exception {
+        getUsersInternal(userIds, result, false);
+    }
+
+    public void getUsersInternal(ArrayList<Long> userIds, ArrayList<TLRPC.User> result, boolean putUnknown) throws Exception {
+        if (userIds == null || userIds.isEmpty() || result == null) {
             return;
         }
-        SQLiteCursor cursor = database.queryFinalized(String.format(Locale.US, "SELECT data, status FROM users WHERE uid IN(%s)", usersToLoad));
-        while (cursor.next()) {
-            try {
-                NativeByteBuffer data = cursor.byteBufferValue(0);
-                if (data != null) {
-                    TLRPC.User user = TLRPC.User.TLdeserialize(data, data.readInt32(false), false);
-                    data.reuse();
-                    if (user != null) {
-                        if (user.status != null) {
-                            user.status.expires = cursor.intValue(1);
-                        }
-                        result.add(user);
-                    }
+        if (userIds.size() > 50) {
+            for (int i = 0; i < userIds.size(); ++i) {
+                long userId = userIds.get(i);
+                TLRPC.User user = getMessagesController().getUser(userId);
+                if (user != null) {
+                    result.add(user);
+                    userIds.remove(i);
+                    i--;
                 }
-            } catch (Exception e) {
-                checkSQLException(e);
             }
         }
-        cursor.dispose();
+        if (!userIds.isEmpty()) {
+            SQLiteCursor cursor = database.queryFinalized(String.format(Locale.US, "SELECT data, status FROM users WHERE uid IN(%s)", TextUtils.join(",", userIds)));
+            while (cursor.next()) {
+                try {
+                    NativeByteBuffer data = cursor.byteBufferValue(0);
+                    if (data != null) {
+                        TLRPC.User user = TLRPC.User.TLdeserialize(data, data.readInt32(false), false);
+                        data.reuse();
+                        if (user != null) {
+                            if (user.status != null) {
+                                user.status.expires = cursor.intValue(1);
+                            }
+                            result.add(user);
+                            if (userIds.size() > 50 && putUnknown) {
+                                getMessagesController().putUser(user, true, false);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    checkSQLException(e);
+                }
+            }
+            cursor.dispose();
+        }
+    }
+
+    public void getUsersInternal(HashSet<Long> userIds, ArrayList<TLRPC.User> result) throws Exception {
+        if (userIds == null || userIds.isEmpty() || result == null) {
+            return;
+        }
+        if (userIds.size() > 50) {
+            Iterator<Long> iterator = userIds.iterator();
+            while (iterator.hasNext()) {
+                Long userId = iterator.next();
+                TLRPC.User user = getMessagesController().getUser(userId);
+                if (user != null) {
+                    result.add(user);
+                    iterator.remove();
+                }
+            }
+        }
+        if (!userIds.isEmpty()) {
+            SQLiteCursor cursor = database.queryFinalized(String.format(Locale.US, "SELECT data, status FROM users WHERE uid IN(%s)", TextUtils.join(",", userIds)));
+            while (cursor.next()) {
+                try {
+                    NativeByteBuffer data = cursor.byteBufferValue(0);
+                    if (data != null) {
+                        TLRPC.User user = TLRPC.User.TLdeserialize(data, data.readInt32(false), false);
+                        data.reuse();
+                        if (user != null) {
+                            if (user.status != null) {
+                                user.status.expires = cursor.intValue(1);
+                            }
+                            result.add(user);
+                        }
+                    }
+                } catch (Exception e) {
+                    checkSQLException(e);
+                }
+            }
+            cursor.dispose();
+        }
     }
 
     public void getChatsInternal(String chatsToLoad, ArrayList<TLRPC.Chat> result) throws Exception {
@@ -11847,12 +11928,20 @@ public class MessagesStorage extends BaseController {
                     }
                     data.reuse();
 
-                    if (downloadMask != 0 && (message.peer_id.channel_id == 0 || message.post) && message.date >= getConnectionsManager().getCurrentTime() - 60 * 60 && getDownloadController().canDownloadMedia(message) == 1) {
-                        if (message.media instanceof TLRPC.TL_messageMediaPhoto || message.media instanceof TLRPC.TL_messageMediaDocument || message.media instanceof TLRPC.TL_messageMediaWebPage) {
+                    if (downloadMask != 0 && (message.peer_id.channel_id == 0 || message.post) && message.date >= getConnectionsManager().getCurrentTime() - 15 * 60 && getDownloadController().canDownloadMedia(message) == 1) {
+                        final long dialogId = MessageObject.getDialogId(message);
+                        if (getDialogFolderIdInternal(dialogId) != 1 && (message.media instanceof TLRPC.TL_messageMediaPhoto || message.media instanceof TLRPC.TL_messageMediaDocument || message.media instanceof TLRPC.TL_messageMediaWebPage)) {
                             int type = 0;
                             long id = 0;
                             TLRPC.MessageMedia object = null;
                             TLRPC.Document document = MessageObject.getDocument(message);
+                            ArrayList<VideoPlayer.Quality> qualities = VideoPlayer.getQualities(currentAccount, message.media);
+                            if (qualities != null) {
+                                VideoPlayer.VideoUri v = VideoPlayer.getQualityForThumb(qualities);
+                                if (v != null) {
+                                    document = v.document;
+                                }
+                            }
                             TLRPC.Photo photo = MessageObject.getPhoto(message);
                             if (MessageObject.isVoiceMessage(message)) {
                                 id = document.id;
@@ -12734,18 +12823,15 @@ public class MessagesStorage extends BaseController {
                     database.commitTransaction();
                 }
             } else {
-                StringBuilder ids = new StringBuilder();
+                ArrayList<Long> ids = new ArrayList<Long>();
                 LongSparseArray<TLRPC.User> usersDict = new LongSparseArray<>();
                 for (int a = 0, N = users.size(); a < N; a++) {
                     TLRPC.User user = users.get(a);
-                    if (ids.length() != 0) {
-                        ids.append(",");
-                    }
-                    ids.append(user.id);
+                    ids.add(user.id);
                     usersDict.put(user.id, user);
                 }
                 ArrayList<TLRPC.User> loadedUsers = new ArrayList<>();
-                getUsersInternal(ids.toString(), loadedUsers);
+                getUsersInternal(ids, loadedUsers);
                 for (int a = 0, N = loadedUsers.size(); a < N; a++) {
                     TLRPC.User user = loadedUsers.get(a);
                     TLRPC.User updateUser = usersDict.get(user.id);
@@ -13769,7 +13855,7 @@ public class MessagesStorage extends BaseController {
             }
 
             if (!usersToLoad.isEmpty()) {
-                getUsersInternal(TextUtils.join(",", usersToLoad), dialogs.users);
+                getUsersInternal(usersToLoad, dialogs.users);
             }
 
             getMessagesController().getTopicsController().updateTopicsWithDeletedMessages(originalDialogId, messages);
@@ -14531,6 +14617,38 @@ public class MessagesStorage extends BaseController {
         });
     }
 
+    public void loadMessageAttachPaths(ArrayList<MessageObject> messageObjects, Runnable done) {
+        storageQueue.postRunnable(() -> {
+            final long selfId = getUserConfig().getClientUserId();
+            for (MessageObject messageObject : messageObjects) {
+                if (messageObject.scheduled) continue; // TODO if needed
+                if (messageObject.isQuickReply()) continue;
+                SQLiteCursor cursor = null;
+                try {
+                    cursor = database.queryFinalized("SELECT data FROM messages_v2 WHERE uid = ? AND mid = ?", messageObject.getDialogId(), messageObject.getId());
+                    if (cursor.next()) {
+                        NativeByteBuffer data = cursor.byteBufferValue(0);
+                        if (data != null) {
+                            TLRPC.Message message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
+                            message.readAttachPath(data, selfId);
+                            data.reuse();
+
+                            messageObject.messageOwner.attachPath = message.attachPath;
+                            messageObject.checkMediaExistance();
+                        }
+                    }
+                } catch (Exception e) {
+                    FileLog.e(e);
+                } finally {
+                    if (cursor != null) {
+                        cursor.dispose();
+                    }
+                }
+            }
+            AndroidUtilities.runOnUIThread(done);
+        });
+    }
+
     // put messages in data base while load history
     public void putMessages(TLRPC.messages_Messages messages, long dialogId, int load_type, int max_id, boolean createDialog, int mode, long threadMessageId) {
         storageQueue.postRunnable(() -> {
@@ -14549,9 +14667,6 @@ public class MessagesStorage extends BaseController {
                 final boolean scheduled = mode == ChatActivity.MODE_SCHEDULED;
                 final boolean quickReplies = mode == ChatActivity.MODE_QUICK_REPLIES;
                 if (quickReplies) {
-//                    final long type = dialogId;
-
-//                    database.executeFast(String.format(Locale.US, "DELETE FROM quick_replies_messages WHERE topic_id = %d AND mid > 0", topic_id)).stepThis().dispose();
                     state_messages = database.executeFast("REPLACE INTO quick_replies_messages VALUES(?, ?, ?, ?, ?, ?, NULL, 0)");
                     int count = messages.messages.size();
                     for (int a = 0; a < count; a++) {
@@ -14718,6 +14833,13 @@ public class MessagesStorage extends BaseController {
                                         sameMedia = oldMessage.media.photo.id == message.media.photo.id;
                                     } else if (oldMessage.media instanceof TLRPC.TL_messageMediaDocument && message.media instanceof TLRPC.TL_messageMediaDocument && oldMessage.media.document != null && message.media.document != null) {
                                         sameMedia = oldMessage.media.document.id == message.media.document.id;
+                                    } else if (MessageObject.getPhoto(oldMessage) != null && MessageObject.getPhoto(message) != null) {
+                                        sameMedia = MessageObject.getPhoto(oldMessage).id == MessageObject.getPhoto(message).id;
+                                    } else if (MessageObject.getDocument(oldMessage) != null && MessageObject.getDocument(message) != null) {
+                                        sameMedia = MessageObject.getDocument(oldMessage).id == MessageObject.getDocument(message).id;
+                                    }
+                                    if (oldMessage.out && !message.out) {
+                                        message.out = oldMessage.out;
                                     }
                                     if (!sameMedia) {
                                         addFilesToDelete(oldMessage, filesToDelete, idsToDelete, namesToDelete, false);
@@ -15262,6 +15384,14 @@ public class MessagesStorage extends BaseController {
                 }
             }
         }
+        if (message.reactions != null && message.reactions.top_reactors != null) {
+            for (int i = 0; i < message.reactions.top_reactors.size(); ++i) {
+                final TLRPC.MessageReactor reactor = message.reactions.top_reactors.get(i);
+                if (reactor != null && reactor.peer_id != null) {
+                    addLoadPeerInfo(reactor.peer_id, usersToLoad, chatsToLoad);
+                }
+            }
+        }
     }
 
     public static void addLoadPeerInfo(TLRPC.Peer peer, ArrayList<Long> usersToLoad, ArrayList<Long> chatsToLoad) {
@@ -15593,7 +15723,7 @@ public class MessagesStorage extends BaseController {
                     getChatsInternal(TextUtils.join(",", chatsToLoad), dialogs.chats);
                 }
                 if (!usersToLoad.isEmpty()) {
-                    getUsersInternal(TextUtils.join(",", usersToLoad), dialogs.users);
+                    getUsersInternal(usersToLoad, dialogs.users);
                 }
                 ArrayList<TLRPC.UserFull> fullUsers = null;
                 if (!dialogUsers.isEmpty()) {
@@ -15974,6 +16104,32 @@ public class MessagesStorage extends BaseController {
                 state_tasks.dispose();
             }
         }
+    }
+
+    private int getDialogFolderIdInternal(long dialogId) {
+        SQLiteCursor cursor = null;
+        try {
+            int folderId;
+            if (unknownDialogsIds.get(dialogId) != null) {
+                folderId = -1;
+            } else {
+                cursor = database.queryFinalized("SELECT folder_id FROM dialogs WHERE did = ?", dialogId);
+                if (cursor.next()) {
+                    folderId = cursor.intValue(0);
+                } else {
+                    folderId = -1;
+                }
+                cursor.dispose();
+            }
+            return folderId;
+        } catch (Exception e) {
+            checkSQLException(e);
+        } finally {
+            if (cursor != null) {
+                cursor.dispose();
+            }
+        }
+        return 0;
     }
 
     public void getDialogFolderId(long dialogId, IntCallback callback) {
@@ -16434,7 +16590,9 @@ public class MessagesStorage extends BaseController {
         TLRPC.User user = null;
         try {
             ArrayList<TLRPC.User> users = new ArrayList<>();
-            getUsersInternal("" + userId, users);
+            ArrayList<Long> userIds = new ArrayList<>();
+            userIds.add(userId);
+            getUsersInternal(userIds, users);
             if (!users.isEmpty()) {
                 user = users.get(0);
             }
@@ -16447,7 +16605,7 @@ public class MessagesStorage extends BaseController {
     public ArrayList<TLRPC.User> getUsers(ArrayList<Long> uids) {
         ArrayList<TLRPC.User> users = new ArrayList<>();
         try {
-            getUsersInternal(TextUtils.join(",", uids), users);
+            getUsersInternal(uids, users);
         } catch (Exception e) {
             users.clear();
             checkSQLException(e);
@@ -16503,9 +16661,9 @@ public class MessagesStorage extends BaseController {
             if (TextUtils.isEmpty(search1)) {
                 return;
             }
-            String savedMessages = LocaleController.getString("SavedMessages", R.string.SavedMessages).toLowerCase();
+            String savedMessages = LocaleController.getString(R.string.SavedMessages).toLowerCase();
             String savedMessages2 = "saved messages";
-            String replies = LocaleController.getString("RepliesTitle", R.string.RepliesTitle).toLowerCase();
+            String replies = LocaleController.getString(R.string.RepliesTitle).toLowerCase();
             String replies2 = "replies";
             String search2 = LocaleController.getInstance().getTranslitString(search1);
             if (search1.equals(search2) || search2.length() == 0) {
@@ -16585,7 +16743,7 @@ public class MessagesStorage extends BaseController {
                 if (user != null) {
                     DialogsSearchAdapter.DialogSearchResult dialogSearchResult = new DialogsSearchAdapter.DialogSearchResult();
                     dialogSearchResult.date = Integer.MAX_VALUE;
-                    dialogSearchResult.name = LocaleController.getString("RepliesTitle", R.string.RepliesTitle);
+                    dialogSearchResult.name = LocaleController.getString(R.string.RepliesTitle);
                     dialogSearchResult.object = user;
                     dialogsResult.put(user.id, dialogSearchResult);
                     resultCount++;

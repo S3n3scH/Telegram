@@ -3,7 +3,6 @@ package org.telegram.ui.ActionBar;
 import static org.telegram.ui.ActionBar.Theme.*;
 
 import android.graphics.Color;
-import android.util.Log;
 import android.util.SparseArray;
 
 import androidx.core.graphics.ColorUtils;
@@ -64,6 +63,12 @@ public class ThemeColors {
         defaultColors[key_dialogEmptyText] = 0xff8c9094;
         defaultColors[key_dialogSwipeRemove] = 0xffe56555;
         defaultColors[key_dialogReactionMentionBackground] = 0xffF05459;
+        defaultColors[key_dialogCardShadow] = 0x30999999;
+        defaultColors[key_dialogGiftsBackground] = 0xffF5F6F7;
+        defaultColors[key_dialogGiftsTabText] = 0xFF56595C;
+        defaultColors[key_bot_loadingIcon] = 0xFFF2F2F2;
+        defaultColors[key_gift_ribbon] = 0xFF46A4F2;
+        defaultColors[key_gift_ribbon_soldout] = 0xffcc4747;
 
         defaultColors[key_windowBackgroundWhite] = 0xffffffff;
         defaultColors[key_windowBackgroundUnchecked] = 0xff9da7b1;
@@ -196,8 +201,10 @@ public class ThemeColors {
         defaultColors[key_actionBarTabUnactiveText] = 0xffd5e8f7;
         defaultColors[key_actionBarTabLine] = 0xffffffff;
         defaultColors[key_actionBarTabSelector] = 0xff406d94;
-
         defaultColors[key_actionBarBrowser] = 0xffffffff;
+
+        defaultColors[key_table_background] = 0xfff7f7f7;
+        defaultColors[key_table_border] = 0xffE0E0E0;
 
         defaultColors[key_actionBarDefaultArchived] = 0xff6f7a87;
         defaultColors[key_actionBarDefaultArchivedSelector] = 0xff5e6772;
@@ -695,6 +702,7 @@ public class ThemeColors {
         defaultColors[key_voipgroup_leaveButtonScrolled] = 0x82D14D54;
         defaultColors[key_voipgroup_connectingProgress] = 0xff28BAFF;
         defaultColors[key_voipgroup_disabledButton] = 0xff1C2229;
+        defaultColors[key_voipgroup_rtmpButton] = 0xff2a3853;
         defaultColors[key_voipgroup_disabledButtonActive] = 0xff2C3A45;
         defaultColors[key_voipgroup_disabledButtonActiveScrolled] = 0x8277A1FC;
         defaultColors[key_voipgroup_unmuteButton] = 0xff539EF8;
@@ -758,8 +766,10 @@ public class ThemeColors {
         defaultColors[key_premiumGradientBackground3] = 0xffDB5C9D;
         defaultColors[key_premiumGradientBackground4] = 0xffF38926;
         defaultColors[key_premiumGradientBackgroundOverlay] = Color.WHITE;
-        defaultColors[key_premiumStartGradient1] = 0xffFFFFFF;
-        defaultColors[key_premiumStartGradient2] = 0xffE3ECFA;
+        defaultColors[key_premiumStarGradient1] = 0xffFFFFFF;
+        defaultColors[key_premiumStarGradient2] = 0xffE3ECFA;
+        defaultColors[key_premiumCoinGradient1] = -15436801;
+        defaultColors[key_premiumCoinGradient2] = -4167942;
         defaultColors[key_premiumStartSmallStarsColor] = ColorUtils.setAlphaComponent(Color.WHITE, 90);
         defaultColors[key_premiumStartSmallStarsColor2] = ColorUtils.setAlphaComponent(Color.WHITE, 90);
         defaultColors[key_premiumGradientBottomSheet1] = 0xff5B9DE7;
@@ -767,6 +777,8 @@ public class ThemeColors {
         defaultColors[key_premiumGradientBottomSheet3] = 0xffE794BE;
         defaultColors[key_topics_unreadCounter] = 0xff4ecc5e;
         defaultColors[key_topics_unreadCounterMuted] = 0xff8b8d8f;
+        defaultColors[key_starsGradient1] = 0xffFEC846;
+        defaultColors[key_starsGradient2] = 0xffEC920A;
 
         defaultColors[key_stories_circle1] = 0xFF39DF3C;
         defaultColors[key_stories_circle2] = 0xFF4DBBFF;
@@ -784,6 +796,13 @@ public class ThemeColors {
         defaultColors[key_code_number] = 0xFF327FE5;
         defaultColors[key_code_comment] = 0x80000000;
         defaultColors[key_code_function] = 0xFFF28C39;
+
+        defaultColors[key_iv_background] = 0xFFFFFFFF;
+        defaultColors[key_iv_backgroundGray] = 0xfff0f0f0;
+        defaultColors[key_iv_ab_progress] = 0xff50a8eb;
+        defaultColors[key_iv_navigationBackground] = 0xfff0f0f0;
+
+        defaultColors[key_reactionStarSelector] = 0x40F0AB1F;
 
         return defaultColors;
     }
@@ -827,6 +846,9 @@ public class ThemeColors {
         colorKeysMap.put(key_dialog_inlineProgress, "dialog_inlineProgress");
         colorKeysMap.put(key_dialogSearchBackground, "dialogSearchBackground");
         colorKeysMap.put(key_dialogSearchHint, "dialogSearchHint");
+        colorKeysMap.put(key_bot_loadingIcon, "bot_loadingIcon");
+        colorKeysMap.put(key_gift_ribbon, "gift_ribbon");
+        colorKeysMap.put(key_gift_ribbon_soldout, "gift_ribbon_soldout");
         colorKeysMap.put(key_dialogSearchIcon, "dialogSearchIcon");
         colorKeysMap.put(key_dialogSearchText, "dialogSearchText");
         colorKeysMap.put(key_dialogFloatingButton, "dialogFloatingButton");
@@ -973,6 +995,8 @@ public class ThemeColors {
         colorKeysMap.put(key_actionBarTabUnactiveText, "actionBarTabUnactiveText");
         colorKeysMap.put(key_actionBarTabLine, "actionBarTabLine");
         colorKeysMap.put(key_actionBarTabSelector, "actionBarTabSelector");
+        colorKeysMap.put(key_table_background, "table_background");
+        colorKeysMap.put(key_table_border, "table_border");
         colorKeysMap.put(key_actionBarDefaultArchived, "actionBarDefaultArchived");
         colorKeysMap.put(key_actionBarDefaultArchivedSelector, "actionBarDefaultArchivedSelector");
         colorKeysMap.put(key_actionBarDefaultArchivedIcon, "actionBarDefaultArchivedIcon");
@@ -1315,6 +1339,7 @@ public class ThemeColors {
         colorKeysMap.put(key_chat_inBubbleLocationPlaceholder, "chat_inBubbleLocationPlaceholder");
         colorKeysMap.put(key_chat_outBubbleLocationPlaceholder, "chat_outBubbleLocationPlaceholder");
         colorKeysMap.put(key_chat_BlurAlpha, "chat_BlurAlpha");
+        colorKeysMap.put(key_chat_BlurAlphaSlow, "chat_BlurAlphaSlow");
         colorKeysMap.put(key_chat_editMediaButton, "chat_editMediaButton");
 
         colorKeysMap.put(key_voipgroup_listSelector, "voipgroup_listSelector");
@@ -1350,6 +1375,7 @@ public class ThemeColors {
         colorKeysMap.put(key_voipgroup_unmuteButton, "voipgroup_unmuteButton");
         colorKeysMap.put(key_voipgroup_unmuteButton2, "voipgroup_unmuteButton2");
         colorKeysMap.put(key_voipgroup_disabledButton, "voipgroup_disabledButton");
+        colorKeysMap.put(key_voipgroup_rtmpButton, "voipgroup_rtmpButton");
         colorKeysMap.put(key_voipgroup_disabledButtonActive, "voipgroup_disabledButtonActive");
         colorKeysMap.put(key_voipgroup_disabledButtonActiveScrolled, "voipgroup_disabledButtonActiveScrolled");
         colorKeysMap.put(key_voipgroup_connectingProgress, "voipgroup_connectingProgress");
@@ -1505,8 +1531,10 @@ public class ThemeColors {
         colorKeysMap.put(key_premiumGradientBackground4, "premiumGradientBackground4");
         colorKeysMap.put(key_premiumGradientBackgroundOverlay, "premiumGradientBackgroundOverlay");
         colorKeysMap.put(key_premiumStartSmallStarsColor, "premiumStartSmallStarsColor");
-        colorKeysMap.put(key_premiumStartGradient1, "premiumStarGradient1");
-        colorKeysMap.put(key_premiumStartGradient2, "premiumStarGradient2");
+        colorKeysMap.put(key_premiumStarGradient1, "premiumStarGradient1");
+        colorKeysMap.put(key_premiumStarGradient2, "premiumStarGradient2");
+        colorKeysMap.put(key_premiumCoinGradient1, "premiumCoinGradient1");
+        colorKeysMap.put(key_premiumCoinGradient2, "premiumCoinGradient2");
         colorKeysMap.put(key_premiumStartSmallStarsColor2, "premiumStartSmallStarsColor2");
         colorKeysMap.put(key_premiumGradientBottomSheet1, "premiumGradientBottomSheet1");
         colorKeysMap.put(key_premiumGradientBottomSheet2, "premiumGradientBottomSheet2");
@@ -1528,6 +1556,14 @@ public class ThemeColors {
         colorKeysMap.put(key_code_number, "code_number");
         colorKeysMap.put(key_code_comment, "code_comment");
         colorKeysMap.put(key_code_function, "code_function");
+        colorKeysMap.put(key_iv_background, "iv_background");
+        colorKeysMap.put(key_iv_backgroundGray, "iv_backgroundGray");
+        colorKeysMap.put(key_iv_navigationBackground, "iv_navigationBackground");
+        colorKeysMap.put(key_iv_ab_progress, "iv_ab_progress");
+        colorKeysMap.put(key_reactionStarSelector, "reactionStarSelector");
+        colorKeysMap.put(key_dialogCardShadow, "dialogCardShadow");
+        colorKeysMap.put(key_dialogGiftsBackground, "dialogGiftsBackground");
+        colorKeysMap.put(key_dialogGiftsTabText, "dialogGiftsTabText");
         return colorKeysMap;
     }
 

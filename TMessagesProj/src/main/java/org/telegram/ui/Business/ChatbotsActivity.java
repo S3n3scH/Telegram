@@ -104,7 +104,7 @@ public class ChatbotsActivity extends BaseFragment {
         Drawable checkmark = context.getResources().getDrawable(R.drawable.ic_ab_done).mutate();
         checkmark.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_actionBarDefaultIcon), PorterDuff.Mode.MULTIPLY));
         doneButtonDrawable = new CrossfadeDrawable(checkmark, new CircularProgressDrawable(Theme.getColor(Theme.key_actionBarDefaultIcon)));
-        doneButton = actionBar.createMenu().addItemWithWidth(done_button, doneButtonDrawable, AndroidUtilities.dp(56), LocaleController.getString("Done", R.string.Done));
+        doneButton = actionBar.createMenu().addItemWithWidth(done_button, doneButtonDrawable, AndroidUtilities.dp(56), LocaleController.getString(R.string.Done));
         checkDone(false);
 
         FrameLayout contentView = new FrameLayout(context);
@@ -224,7 +224,7 @@ public class ChatbotsActivity extends BaseFragment {
         });
         recipientsHelper.setValue(currentBot == null ? null : currentBot.recipients);
 
-        listView = new UniversalRecyclerView(context, currentAccount, this::fillItems, this::onClick, null, getResourceProvider());
+        listView = new UniversalRecyclerView(this, this::fillItems, this::onClick, null);
         contentView.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
         return fragmentView = contentView;
@@ -351,14 +351,26 @@ public class ChatbotsActivity extends BaseFragment {
             listView.adapter.update(true);
             checkDone(true);
         } else if (item.viewType == UniversalAdapter.VIEW_TYPE_USER_ADD) {
-            selectedBot = foundBots.get(item.dialogId);
+            TLRPC.User bot = foundBots.get(item.dialogId);
+            if (bot == null) return;
+            if (!bot.bot_business) {
+                showDialog(
+                    new AlertDialog.Builder(getContext(), resourceProvider)
+                        .setTitle(getString(R.string.BusinessBotNotSupportedTitle))
+                        .setMessage(AndroidUtilities.replaceTags(getString(R.string.BusinessBotNotSupportedMessage)))
+                        .setPositiveButton(getString(R.string.OK), null)
+                        .create()
+                );
+                return;
+            }
+            selectedBot = bot;
             AndroidUtilities.hideKeyboard(editText);
             listView.adapter.update(true);
             checkDone(true);
         }
     }
 
-    private void clear() {
+    private void clear(View view) {
         selectedBot = null;
         listView.adapter.update(true);
         checkDone(true);
@@ -376,35 +388,55 @@ public class ChatbotsActivity extends BaseFragment {
             return;
         }
 
-        TLRPC.TL_account_updateConnectedBot req = new TLRPC.TL_account_updateConnectedBot();
-        if (selectedBot == null) {
+        ArrayList<TLObject> requests = new ArrayList<>();
+
+        if (currentBot != null && (selectedBot == null || currentBot.bot_id != selectedBot.id)) {
+            TLRPC.TL_account_updateConnectedBot req = new TLRPC.TL_account_updateConnectedBot();
             req.deleted = true;
-            req.bot = new TLRPC.TL_inputUserEmpty();
-            req.recipients = new TLRPC.TL_inputBusinessRecipients();
-        } else {
+            req.bot = getMessagesController().getInputUser(currentBot.bot_id);
+            req.recipients = new TLRPC.TL_inputBusinessBotRecipients();
+            requests.add(req);
+        }
+
+        if (selectedBot != null) {
+            TLRPC.TL_account_updateConnectedBot req = new TLRPC.TL_account_updateConnectedBot();
+            req.deleted = false;
             req.can_reply = allowReply;
             req.bot = getMessagesController().getInputUser(selectedBot);
-            req.recipients = recipientsHelper.getInputValue();
+            req.recipients = recipientsHelper.getBotInputValue();
+            requests.add(req);
 
             if (currentBot != null) {
-                currentBot.can_reply = allowReply;
                 currentBot.bot_id = selectedBot.id;
-                currentBot.recipients = recipientsHelper.getValue();
+                currentBot.recipients = recipientsHelper.getBotValue();
+                currentBot.can_reply = allowReply;
             }
         }
 
-        getConnectionsManager().sendRequest(req, (res, err) -> AndroidUtilities.runOnUIThread(() -> {
-            if (res instanceof TLRPC.Updates) {
-                getMessagesController().processUpdates((TLRPC.Updates) res, false);
-            }
-            if (err != null) {
-                doneButtonDrawable.animateToProgress(0f);
-                BulletinFactory.showError(err);
-            } else {
-                BusinessChatbotController.getInstance(currentAccount).invalidate();
-                finishFragment();
-            }
-        }));
+        if (requests.isEmpty()) {
+            finishFragment();
+            return;
+        }
+
+        final int[] requestsReceived = new int[] { 0 };
+        for (int i = 0; i < requests.size(); ++i) {
+            getConnectionsManager().sendRequest(requests.get(i), (res, err) -> AndroidUtilities.runOnUIThread(() -> {
+                if (err != null) {
+                    doneButtonDrawable.animateToProgress(0f);
+                    BulletinFactory.showError(err);
+                } else if (res instanceof TLRPC.TL_boolFalse) {
+                    doneButtonDrawable.animateToProgress(0f);
+                    BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.UnknownError)).show();
+                } else {
+                    requestsReceived[0]++;
+                    if (requestsReceived[0] == requests.size()) {
+                        BusinessChatbotController.getInstance(currentAccount).invalidate(true);
+                        getMessagesController().clearFullUsers();
+                        finishFragment();
+                    }
+                }
+            }));
+        }
     }
 
     private boolean loading;
@@ -432,6 +464,7 @@ public class ChatbotsActivity extends BaseFragment {
     public boolean hasChanges() {
         if (!valueSet) return false;
         if ((selectedBot != null) != (currentBot != null)) return true;
+        if ((selectedBot == null ? 0 : selectedBot.id) != (currentBot == null ? 0 : currentBot.bot_id)) return true;
         if (selectedBot != null) {
             if (allowReply != currentBot.can_reply) {
                 return true;
@@ -449,8 +482,8 @@ public class ChatbotsActivity extends BaseFragment {
             AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
             builder.setTitle(LocaleController.getString(R.string.UnsavedChanges));
             builder.setMessage(LocaleController.getString(R.string.BusinessBotUnsavedChanges));
-            builder.setPositiveButton(LocaleController.getString("ApplyTheme", R.string.ApplyTheme), (dialogInterface, i) -> processDone());
-            builder.setNegativeButton(LocaleController.getString("PassportDiscard", R.string.PassportDiscard), (dialog, which) -> finishFragment());
+            builder.setPositiveButton(LocaleController.getString(R.string.ApplyTheme), (dialogInterface, i) -> processDone());
+            builder.setNegativeButton(LocaleController.getString(R.string.PassportDiscard), (dialog, which) -> finishFragment());
             showDialog(builder.create());
             return false;
         }

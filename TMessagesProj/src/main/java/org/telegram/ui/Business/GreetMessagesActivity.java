@@ -77,7 +77,7 @@ public class GreetMessagesActivity extends BaseFragment implements NotificationC
         Drawable checkmark = context.getResources().getDrawable(R.drawable.ic_ab_done).mutate();
         checkmark.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_actionBarDefaultIcon), PorterDuff.Mode.MULTIPLY));
         doneButtonDrawable = new CrossfadeDrawable(checkmark, new CircularProgressDrawable(Theme.getColor(Theme.key_actionBarDefaultIcon)));
-        doneButton = actionBar.createMenu().addItemWithWidth(done_button, doneButtonDrawable, AndroidUtilities.dp(56), LocaleController.getString("Done", R.string.Done));
+        doneButton = actionBar.createMenu().addItemWithWidth(done_button, doneButtonDrawable, AndroidUtilities.dp(56), LocaleController.getString(R.string.Done));
         checkDone(false);
 
         FrameLayout contentView = new FrameLayout(context);
@@ -90,7 +90,7 @@ public class GreetMessagesActivity extends BaseFragment implements NotificationC
         recipientsHelper.doNotExcludeNewChats();
         recipientsHelper.setValue(currentValue == null ? null : currentValue.recipients);
 
-        listView = new UniversalRecyclerView(context, currentAccount, this::fillItems, this::onClick, null, getResourceProvider());
+        listView = new UniversalRecyclerView(this, this::fillItems, this::onClick, null);
         contentView.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         setValue();
 
@@ -222,8 +222,8 @@ public class GreetMessagesActivity extends BaseFragment implements NotificationC
             AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
             builder.setTitle(LocaleController.getString(R.string.UnsavedChanges));
             builder.setMessage(LocaleController.getString(R.string.BusinessGreetUnsavedChanges));
-            builder.setPositiveButton(LocaleController.getString("ApplyTheme", R.string.ApplyTheme), (dialogInterface, i) -> processDone());
-            builder.setNegativeButton(LocaleController.getString("PassportDiscard", R.string.PassportDiscard), (dialog, which) -> finishFragment());
+            builder.setPositiveButton(LocaleController.getString(R.string.ApplyTheme), (dialogInterface, i) -> processDone());
+            builder.setNegativeButton(LocaleController.getString(R.string.PassportDiscard), (dialog, which) -> finishFragment());
             showDialog(builder.create());
             return false;
         }

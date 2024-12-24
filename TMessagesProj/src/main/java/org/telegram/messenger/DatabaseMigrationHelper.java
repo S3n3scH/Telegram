@@ -1475,6 +1475,66 @@ public class DatabaseMigrationHelper {
             version = 149;
         }
 
+        if (version == 149) {
+            database.executeFast("ALTER TABLE stickersets2 ADD COLUMN short_name TEXT;").stepThis().dispose();
+            database.executeFast("CREATE INDEX IF NOT EXISTS stickersets2_id_short_name ON stickersets2(id, short_name);").stepThis().dispose();
+
+            database.executeFast("PRAGMA user_version = 150").stepThis().dispose();
+            version = 150;
+        }
+
+        if (version == 150) {
+            database.executeFast("CREATE TABLE business_links(data BLOB, order_value INTEGER);").stepThis().dispose();
+
+            database.executeFast("PRAGMA user_version = 151").stepThis().dispose();
+            version = 151;
+        }
+
+        if (version == 151) {
+            database.executeFast("ALTER TABLE profile_stories ADD COLUMN seen INTEGER default 0;").stepThis().dispose();
+
+            database.executeFast("PRAGMA user_version = 152").stepThis().dispose();
+            version = 152;
+        }
+
+        if (version == 152) {
+            database.executeFast("ALTER TABLE profile_stories ADD COLUMN pin INTEGER default 0;").stepThis().dispose();
+
+            database.executeFast("PRAGMA user_version = 153").stepThis().dispose();
+            version = 153;
+        }
+
+        if (version == 153) {
+            database.executeFast("CREATE TABLE effects(data BLOB)").stepThis().dispose();
+            database.executeFast("PRAGMA user_version = 154").stepThis().dispose();
+            version = 154;
+        }
+
+        if (version == 154) {
+            database.executeFast("CREATE TABLE fact_checks(hash INTEGER PRIMARY KEY, data BLOB, expires INTEGER);").stepThis().dispose();
+            database.executeFast("PRAGMA user_version = 155").stepThis().dispose();
+            version = 155;
+        }
+
+        if (version == 155) {
+            database.executeFast("CREATE TABLE popular_bots(uid INTEGER PRIMARY KEY, time INTEGER, offset TEXT);").stepThis().dispose();
+            database.executeFast("PRAGMA user_version = 156").stepThis().dispose();
+            version = 156;
+        }
+
+        if (version == 156 || version == 157) {
+            database.executeFast("CREATE TABLE star_gifts2(id INTEGER PRIMARY KEY, data BLOB, hash INTEGER, time INTEGER);").stepThis().dispose();
+            database.executeFast("PRAGMA user_version = 158").stepThis().dispose();
+            version = 158;
+        }
+
+        if (version == 158) {
+            database.executeFast("DELETE FROM star_gifts2").stepThis().dispose();
+            database.executeFast("ALTER TABLE star_gifts2 ADD COLUMN pos INTEGER default 0;").stepThis().dispose();
+            database.executeFast("PRAGMA user_version = 159").stepThis().dispose();
+            version = 159;
+        }
+
         return version;
     }
 

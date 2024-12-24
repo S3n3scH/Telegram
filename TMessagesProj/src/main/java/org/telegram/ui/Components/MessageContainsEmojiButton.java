@@ -27,7 +27,6 @@ import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
-import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.Theme;
 
@@ -58,12 +57,13 @@ public class MessageContainsEmojiButton extends FrameLayout implements Notificat
     public final static int REACTIONS_TYPE = 1;
     public final static int EMOJI_STICKER_TYPE = 2;
     public final static int SINGLE_REACTION_TYPE = 3;
+    public final static int STICKERS_BOT_TYPE = 4;
     int type;
 
     private class BoldAndAccent extends CharacterStyle {
         @Override
         public void updateDrawState(TextPaint textPaint) {
-            textPaint.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+            textPaint.setTypeface(AndroidUtilities.bold());
             int wasAlpha = textPaint.getAlpha();
             textPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, resourcesProvider));
             textPaint.setAlpha(wasAlpha);
@@ -101,11 +101,11 @@ public class MessageContainsEmojiButton extends FrameLayout implements Notificat
         } else if (inputStickerSets.size() == 1) {
             String string;
             if (type == EMOJI_TYPE) {
-                string = LocaleController.getString("MessageContainsEmojiPack", R.string.MessageContainsEmojiPack);
+                string = LocaleController.getString(R.string.MessageContainsEmojiPack);
             } else if (type == SINGLE_REACTION_TYPE) {
-                string = LocaleController.getString("MessageContainsReactionPack", R.string.MessageContainsReactionPack);
+                string = LocaleController.getString(R.string.MessageContainsReactionPack);
             } else {
-                string = LocaleController.getString("MessageContainsReactionsPack", R.string.MessageContainsReactionsPack);
+                string = LocaleController.getString(R.string.MessageContainsReactionsPack);
             }
             String[] parts = string.split("%s");
             if (parts.length <= 1) {
@@ -161,6 +161,13 @@ public class MessageContainsEmojiButton extends FrameLayout implements Notificat
                     loadingDrawable.colorKey2 = Theme.key_listSelector;
                     loadingDrawable.setRadiiDp(4);
                 }
+            }
+        } else {
+            if (type == STICKERS_BOT_TYPE) {
+                mainText = AndroidUtilities.replaceSingleTag(LocaleController.getString(R.string.StickersCheckStickersBotForMoreOptions),
+                        Theme.key_chat_messageLinkIn, AndroidUtilities.REPLACING_TAG_TYPE_LINKBOLD,
+                        null,
+                        resourcesProvider);
             }
         }
     }

@@ -6,7 +6,6 @@ import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
-import android.net.Uri;
 import android.os.Build;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -29,8 +28,6 @@ import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.messenger.Utilities;
-import org.telegram.messenger.support.LongSparseIntArray;
-import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.SimpleTextView;
@@ -47,13 +44,9 @@ import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.CheckBox2;
 import org.telegram.ui.Components.AvatarDrawable;
-import org.telegram.ui.Components.PhonebookShareAlert;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Locale;
-import java.util.Objects;
 
 public class ChatAttachAlertQuickRepliesLayout extends ChatAttachAlert.AttachAlertLayout implements NotificationCenter.NotificationCenterDelegate {
 
@@ -114,7 +107,7 @@ public class ChatAttachAlertQuickRepliesLayout extends ChatAttachAlert.AttachAle
             };
             NotificationCenter.listenEmojiLoading(nameTextView);
             nameTextView.setTextColor(getThemedColor(Theme.key_dialogTextBlack));
-            nameTextView.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+            nameTextView.setTypeface(AndroidUtilities.bold());
             nameTextView.setTextSize(16);
             nameTextView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP);
             addView(nameTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 20, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 28 : 72, 12, LocaleController.isRTL ? 72 : 28, 0));
@@ -180,7 +173,7 @@ public class ChatAttachAlertQuickRepliesLayout extends ChatAttachAlert.AttachAle
                 statusTextView.setText(currentStatus);
             } else if (currentUser != null) {
                 if (TextUtils.isEmpty(currentUser.phone)) {
-                    statusTextView.setText(LocaleController.getString("NumberUnknown", R.string.NumberUnknown));
+                    statusTextView.setText(LocaleController.getString(R.string.NumberUnknown));
                 } else {
                     if (formattedPhoneNumberUser != currentUser && formattedPhoneNumber != null) {
                         statusTextView.setText(formattedPhoneNumber);
@@ -307,7 +300,7 @@ public class ChatAttachAlertQuickRepliesLayout extends ChatAttachAlert.AttachAle
             public void onTextChange(String text) {
                 if (text.length() != 0) {
                     if (emptyView != null) {
-                        emptyView.setText(LocaleController.getString("NoResult", R.string.NoResult));
+                        emptyView.setText(LocaleController.getString(R.string.NoResult));
                     }
                 } else {
                     if (listView.getAdapter() != listAdapter) {
@@ -365,7 +358,7 @@ public class ChatAttachAlertQuickRepliesLayout extends ChatAttachAlert.AttachAle
 //                }
             }
         };
-        NotificationCenter.getInstance(UserConfig.selectedAccount).listen(listView, NotificationCenter.emojiLoaded, args -> {
+        NotificationCenter.getInstance(UserConfig.selectedAccount).listenGlobal(listView, NotificationCenter.emojiLoaded, args -> {
             AndroidUtilities.forEachViews(listView, view -> {
                 if (view instanceof QuickRepliesActivity.QuickReplyView) {
                     ((QuickRepliesActivity.QuickReplyView) view).invalidateEmojis();
@@ -414,16 +407,11 @@ public class ChatAttachAlertQuickRepliesLayout extends ChatAttachAlert.AttachAle
                 object = listAdapter.getItem(section, row);
             }
             if (object instanceof QuickRepliesController.QuickReply) {
-                final int currentAccount = UserConfig.selectedAccount;
-                TLRPC.TL_messages_sendQuickReplyMessages req = new TLRPC.TL_messages_sendQuickReplyMessages();
                 long dialogId;
                 if (parentAlert.baseFragment instanceof ChatActivityInterface) {
                     dialogId = ((ChatActivityInterface) parentAlert.baseFragment).getDialogId();
                 } else return;
-                req.peer = MessagesController.getInstance(currentAccount).getInputPeer(dialogId);
-                if (req.peer == null) return;
-                req.shortcut_id = ((QuickRepliesController.QuickReply) object).id;
-                ConnectionsManager.getInstance(currentAccount).sendRequest(req, null);
+                QuickRepliesController.getInstance(UserConfig.selectedAccount).sendQuickReplyTo(dialogId, (QuickRepliesController.QuickReply) object);
                 parentAlert.dismiss();
             }
         });
@@ -454,11 +442,11 @@ public class ChatAttachAlertQuickRepliesLayout extends ChatAttachAlert.AttachAle
     }
 
     private void showErrorBox(String error) {
-        new AlertDialog.Builder(getContext(), resourcesProvider).setTitle(LocaleController.getString("AppName", R.string.AppName)).setMessage(error).setPositiveButton(LocaleController.getString("OK", R.string.OK), null).show();
+        new AlertDialog.Builder(getContext(), resourcesProvider).setTitle(LocaleController.getString(R.string.AppName)).setMessage(error).setPositiveButton(LocaleController.getString(R.string.OK), null).show();
     }
 
     @Override
-    public void sendSelectedItems(boolean notify, int scheduleDate) {
+    public void sendSelectedItems(boolean notify, int scheduleDate, long effectId, boolean invertMedia) {
 
     }
 
